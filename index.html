@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GW2 Toolbox</title>
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/gw2toolbox.css" />
+</head>
+
+<body>
+  <div class="container">
+    <nav class="navbar navbar-default" role="navigation">
+      <div class="navbar-item-default navbar-left">
+        <a class="brand" href="#/achievements">GW2 Toolbox</a>
+      </div>
+
+      <div class="navbar-tabs" role="tablist" aria-label="Site sections">
+        <a class="tab" href="#/achievements" data-route="/achievements" role="tab">Achievements</a>
+        <a class="tab" href="#/about" data-route="/about" role="tab">About</a>
+      </div>
+
+      <div class="navbar-actions">
+        <details class="navbar-dropdown">
+          <summary class="dropdown-summary" aria-label="Open navigation menu" title="Menu">
+            <img class="menu-icon" src="docs/list.svg" alt="" aria-hidden="true" />
+          </summary>
+
+          <div class="dropdown-panel" role="tablist" aria-label="Site sections">
+            <a class="tab dropdown-item" href="#/achievements" data-route="/achievements" role="tab">Achievements</a>
+            <a class="tab dropdown-item" href="#/about" data-route="/about" role="tab">About</a>
+          </div>
+        </details>
+
+        <button id="themeToggle" class="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle dark or light mode">
+          <img class="theme-toggle-icon icon-light-on" src="docs/lightbulb-on.svg" alt="" aria-hidden="true" />
+          <img class="theme-toggle-icon icon-light-off"  src="docs/lightbulb-off.svg"  alt="" aria-hidden="true" />
+        </button>
+
+        <a class="github-link" href="https://github.com/AKruimink/gw2-toolbox" target="_blank" rel="noopener" aria-label="View project on GitHub" title="View project on GitHub">
+          <img class="github-icon" src="docs/github-mark-white.svg" alt="" aria-hidden="true" />
+        </a>
+      </div>
+    </nav>
+
+    <main id="content" class="content-column"></main>
+  </div>
+
+  <script type="module" src="js/gw2toolbox.js"></script>
+</body>
+
+</html>

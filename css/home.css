@@ -1,0 +1,81 @@
+.home-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 20px 80px;
+}
+
+.home-header {
+    text-align: center;
+    max-width: 760px;
+}
+
+.home-header h1 {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    color: rgb(var(--accent-color));
+}
+
+.home-header .home-intro {
+    margin: 0 auto;
+    max-width: 720px;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: rgb(var(--secondary-text-color));
+}
+
+.home-key-section,
+.home-instructions {
+    width: 100%;
+    max-width: 760px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.section-header h2 {
+    font-size: 1.05rem;
+    margin: 0;
+    padding-bottom: 8px;
+    color: rgb(var(--accent-color));
+    border-bottom: 1px solid rgba(var(--accent-color), 0.35);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.input-field {
+    position: relative;
+    width: 100%;
+}
+
+.home-instructions ol {
+    list-style: decimal inside;
+    display: grid;
+    gap: 14px;
+    color: rgb(var(--secondary-text-color));
+}
+
+.home-instructions a {
+    color: rgb(var(--link-color));
+    text-decoration: none;
+}
+
+.home-instructions a:hover,
+.home-instructions a:focus-visible {
+    text-decoration: underline;
+}
+
+kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgb(var(--secondary-text-color));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 0.92rem;
+}

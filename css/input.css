@@ -1,0 +1,62 @@
+.text-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid rgb(var(--border-color));
+    border-radius: 10px;
+    background-color: rgb(var(--secondary-bg-color));
+    color: rgb(var(--primary-text-color));
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: rgb(var(--link-color));
+    box-shadow: 0 0 0 3px rgba(96, 168, 255, 0.16);
+}
+
+.text-input.invalid {
+    border-color: rgb(var(--accent-color));
+    box-shadow: 0 0 0 3px rgba(var(--accent-color), 0.18);
+}
+
+.text-input::placeholder {
+    color: rgb(var(--secondary-text-color));
+}
+
+.validation-tooltip {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    right: 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background-color: rgba(var(--accent-color), 0.96);
+    color: white;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1;
+}
+
+.validation-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.validation-tooltip::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    left: 24px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid rgba(var(--accent-color), 0.96);
+}

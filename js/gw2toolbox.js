@@ -1,4 +1,9 @@
 const routes = {
+    "/home": {
+        html: "views/home.html",
+        css: ["css/home.css", "css/input.css"],
+        module: "./home.js",
+    },
     "/achievements": {
         html: "views/achievements.html",
         css: ["css/achievements.css", "css/paginator.css"],
@@ -11,7 +16,7 @@ const routes = {
     },
 };
 
-const appElement = document.getElementById("app");
+const appElement = document.getElementById("content");
 
 let currentRoute = {
     route: null,
@@ -26,10 +31,10 @@ let currentRoute = {
  */
 function normalizeRoute(route) {
     if (!route) {
-        return "/achievements";
+        return "/home";
     }
 
-    return routes[route] ? route : "/achievements";
+    return routes[route] ? route : "/home";
 }
 
 /**
@@ -177,7 +182,7 @@ function onRouteChange() {
 window.addEventListener("hashchange", onRouteChange);
 
 if (!window.location.hash) {
-    window.location.hash = "#/achievements";
+    window.location.hash = "#/home";
 }
 
 onRouteChange();

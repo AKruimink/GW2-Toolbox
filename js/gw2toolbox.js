@@ -1,10 +1,7 @@
 const routes = {
     "/achievements": {
         html: "views/achievements.html",
-        css: [
-            "css/achievements.css",
-            "css/paginator.css",
-        ],
+        css: ["css/achievements.css", "css/paginator.css"],
         module: "./achievements.js",
     },
     "/about": {
@@ -19,10 +16,14 @@ const appElement = document.getElementById("app");
 let currentRoute = {
     route: null,
     cleanup: null,
-    cssHrefs: []
+    cssHrefs: [],
 };
 
-// Ensure a valid route, default to "/achievements" when missing/unknown.
+/**
+ * Ensures a valid route, defaulting to "/achievements" when missing/unknown.
+ * @param {string} route Route candidate (e.g. "/about").
+ * @returns {string} A normalized route that exists in the routes map.
+ */
 function normalizeRoute(route) {
     if (!route) {
         return "/achievements";
@@ -31,7 +32,10 @@ function normalizeRoute(route) {
     return routes[route] ? route : "/achievements";
 }
 
-// Read the current hash and convert it into a normalized route string.
+/**
+ * Reads the current location hash and converts it into a normalized route string.
+ * @returns {string} Normalized route derived from window.location.hash.
+ */
 function getRouteFromHash() {
     const hash = window.location.hash || "#/achievements";
     const route = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -39,7 +43,11 @@ function getRouteFromHash() {
     return normalizeRoute(route);
 }
 
-// Update the navbar UI so the active tab matches the current route.
+/**
+ * Updates the navbar UI so the active tab matches the current route.
+ * @param {string} route Normalized route string.
+ * @returns {void}
+ */
 function setActiveTab(route) {
     document.querySelectorAll(".tab").forEach((a) => {
         const isActive = a.dataset.route === route;
@@ -47,14 +55,17 @@ function setActiveTab(route) {
     });
 }
 
-// Dynamically attach a stylesheet link once per view CSS href.
+/**
+ * Dynamically attaches a stylesheet link once per view CSS href.
+ * @param {string} href Stylesheet href to attach.
+ * @returns {void}
+ */
 function loadCss(href) {
     if (document.querySelector(`link[data-view-css="${href}"]`)) {
         return;
     }
 
     const link = document.createElement("link");
-
     link.rel = "stylesheet";
     link.href = href;
     link.setAttribute("data-view-css", href);
@@ -62,7 +73,11 @@ function loadCss(href) {
     document.head.appendChild(link);
 }
 
-// Remove a dynamically-attached view stylesheet link (if present).
+/**
+ * Removes a dynamically-attached view stylesheet link (if present).
+ * @param {string} href Stylesheet href to remove.
+ * @returns {void}
+ */
 function unloadCss(href) {
     const link = document.querySelector(`link[data-view-css="${href}"]`);
     if (link) {
@@ -70,7 +85,12 @@ function unloadCss(href) {
     }
 }
 
-// Load a route's HTML/CSS/modules, swap the DOM, run init(), and cleanup prior view resources.
+/**
+ * Loads a route's HTML/CSS/modules, swaps the DOM, runs init(), and cleans up prior view resources.
+ * View modules may export an init({ root }) function that optionally returns a cleanup function.
+ * @param {string} route Normalized route string.
+ * @returns {Promise<void>}
+ */
 async function loadView(route) {
     const routeDefinition = routes[route];
 
@@ -87,7 +107,9 @@ async function loadView(route) {
     // Preload the new HTML
     const response = await fetch(routeDefinition.html, { cache: "no-cache" });
     if (!response.ok) {
-        appElement.innerHTML = `<div role="alert">Failed to load view: ${route}</div>`;
+        if (appElement) {
+            appElement.innerHTML = `<div role="alert">Failed to load view: ${route}</div>`;
+        }
         return;
     }
 
@@ -102,11 +124,15 @@ async function loadView(route) {
         }
     }
 
-    appElement.innerHTML = nextHtml;
+    // Swap DOM
+    if (appElement) {
+        appElement.innerHTML = nextHtml;
+    }
     setActiveTab(route);
 
     // Load module after the DOM swap
     let nextCleanup = null;
+
     if (routeDefinition.module) {
         const mod = await import(routeDefinition.module);
 
@@ -126,7 +152,7 @@ async function loadView(route) {
         cssHrefs: nextCssHrefs,
     };
 
-    // Cleanup the old CSS
+    // Cleanup old CSS that is not needed by the new view
     for (const href of previousCssHrefs) {
         if (!nextCssHrefs.includes(href)) {
             unloadCss(href);
@@ -134,7 +160,10 @@ async function loadView(route) {
     }
 }
 
-// Handle hash changes by closing any open nav dropdown and loading the new route.
+/**
+ * Handles hash changes by closing any open nav dropdown and loading the new route.
+ * @returns {void}
+ */
 function onRouteChange() {
     const navDropDown = document.querySelector(".navbar-dropdown[open]");
     if (navDropDown) {
@@ -142,7 +171,7 @@ function onRouteChange() {
     }
 
     const route = getRouteFromHash();
-    loadView(route);
+    void loadView(route);
 }
 
 window.addEventListener("hashchange", onRouteChange);
@@ -153,7 +182,10 @@ if (!window.location.hash) {
 
 onRouteChange();
 
-// Initialize the theme toggle button
+/**
+ * Initializes the theme toggle button (light/dark) and persists preference in localStorage.
+ * @returns {void}
+ */
 function setupThemeToggle() {
     const THEME_KEY = "gw2toolbox.theme";
     const toggleBtn = document.getElementById("themeToggle");
@@ -161,16 +193,26 @@ function setupThemeToggle() {
         return;
     }
 
+    /**
+     * Determines the initial theme:
+     * - from storage, if present
+     * - otherwise from OS preference (defaults to dark when unknown)
+     * @returns {"light"|"dark"}
+     */
     function getInitialTheme() {
         const stored = localStorage.getItem(THEME_KEY);
         if (stored === "light" || stored === "dark") {
             return stored;
         }
 
-        // Optional: default based on OS preference when nothing is stored
         return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
     }
 
+    /**
+     * Applies the given theme to the document and persists it.
+     * @param {"light"|"dark"} theme Theme to apply.
+     * @returns {void}
+     */
     function applyTheme(theme) {
         const isLight = theme === "light";
 

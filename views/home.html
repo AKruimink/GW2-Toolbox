@@ -10,17 +10,21 @@
     </div>
 
     <div class="input-field">
-      <input
-        id="apiKeyInput"
-        class="text-input api-key-input"
-        type="text"
-        autocomplete="off"
-        data-storage-key="gw2toolbox.apiKey"
-        data-persist="true"
-        data-validation="validateApiKey"
-        placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
-        aria-describedby="apiKeyError"
-      />
+      <div class="input-with-button">
+        <input
+          id="apiKeyInput"
+          class="text-input api-key-input"
+          type="text"
+          autocomplete="off"
+          data-storage-key="gw2toolbox.apiKey"
+          data-persist="true"
+          data-validation="validateApiKey"
+          data-clearable="true"
+          placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+          aria-describedby="apiKeyError"
+        />
+        <button type="button" class="clear-button hidden" aria-label="Clear API key">×</button>
+      </div>
       <div id="apiKeyError" class="validation-tooltip" aria-live="polite"></div>
     </div>
   </section>

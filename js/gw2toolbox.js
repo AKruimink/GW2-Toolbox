@@ -1,7 +1,7 @@
 const routes = {
     "/home": {
         html: "views/home.html",
-        css: ["css/home.css", "css/input.css"],
+        css: ["css/home.css", "css/input.css", "css/form-controls.css"],
         module: "./home.js",
     },
     "/achievements": {

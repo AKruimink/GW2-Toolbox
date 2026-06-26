@@ -97,6 +97,8 @@ label.field-label,
     position: relative;
     display: flex;
     align-items: center;
+    width: 100%;
+    min-width: 0;
 }
 
 .field-control {
@@ -112,8 +114,8 @@ label.field-label,
     height: 28px;
     border: none;
     border-radius: 50%;
-    background: rgba(var(--secondary-bg-color), 0.85);
-    color: rgb(var(--secondary-text-color));
+    background: rgb(var(--secondary-bg-color));
+    color: rgb(var(--primary-text-color));
     font-size: 1rem;
     cursor: pointer;
     display: inline-flex;

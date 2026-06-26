@@ -50,6 +50,56 @@ function updatePickerLabel(root) {
     }
 }
 
+function updateClearButtonVisibility(root, clearButton) {
+    if (!clearButton) {
+        return;
+    }
+
+    const hasValue = root.matches(".select-picker")
+        ? root.querySelectorAll(".select-picker-option.selected").length > 0
+        : Boolean(root.value.trim());
+
+    clearButton.classList.toggle("hidden", !hasValue);
+}
+
+function createClearButtonForInput(input) {
+    const shouldClear = input.dataset.clearable === "true";
+    if (!shouldClear) {
+        return null;
+    }
+
+    let button = input.parentElement.querySelector(".clear-button");
+    if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "clear-button hidden";
+        button.setAttribute("aria-label", "Clear input");
+        button.textContent = "×";
+        input.parentElement.appendChild(button);
+    }
+
+    const update = () => {
+        const hasValue = Boolean(input.value.trim());
+        button.classList.toggle("hidden", !hasValue);
+    };
+
+    const onClear = () => {
+        input.value = "";
+        persistControlValue(input);
+        update();
+        input.focus();
+    };
+
+    input.addEventListener("input", update);
+    button.addEventListener("click", onClear);
+    update();
+
+    return () => {
+        input.removeEventListener("input", update);
+        button.removeEventListener("click", onClear);
+    };
+}
+
 function toggleDropdown(root, open) {
     const dropdown = root.querySelector(".select-picker-dropdown");
     if (!dropdown) return;
@@ -77,15 +127,28 @@ function filterOptions(root, query) {
 function initializePicker(picker) {
     const singleSelect = picker.dataset.multiselect !== "true";
     const input = picker.querySelector(".select-picker-input");
+    const clearButton = picker.querySelector(".clear-button");
     const dropdown = picker.querySelector(".select-picker-dropdown");
     const searchInput = picker.querySelector(".select-search");
-    const options = Array.from(picker.querySelectorAll(".select-picker-option"));
+    const allOption = picker.querySelector(".select-picker-all");
+    const options = Array.from(picker.querySelectorAll(".select-picker-option")).filter((option) => !option.classList.contains("select-picker-all"));
 
-    if (!input || !dropdown || !searchInput || options.length === 0) {
+    if (!input || !dropdown || !searchInput || options.length === 0 || !allOption) {
         return () => {};
     }
 
+    const updateSelectAllOption = () => {
+        const allSelected = options.length > 0 && options.every((option) => option.classList.contains("selected"));
+        allOption.classList.toggle("selected", allSelected);
+        const label = allOption.querySelector("span");
+        if (label) {
+            label.textContent = allSelected ? "Deselect all" : "Select all";
+        }
+    };
+
     updatePickerLabel(picker);
+    updateClearButtonVisibility(picker, clearButton);
+    updateSelectAllOption();
 
     const onInputClick = (event) => {
         event.stopPropagation();
@@ -98,24 +161,47 @@ function initializePicker(picker) {
         filterOptions(picker, searchInput.value);
     };
 
-    const optionHandlers = options.map((option) => {
-        const handler = () => {
-            if (!singleSelect) {
-                option.classList.toggle("selected");
-            } else {
-                options.forEach((item) => {
-                    item.classList.toggle("selected", item === option);
-                });
-            }
-            updatePickerLabel(picker);
-            persistControlValue(picker);
-            if (singleSelect) {
-                toggleDropdown(picker, false);
-            }
-        };
+    const updateSelectedState = () => {
+        updatePickerLabel(picker);
+        persistControlValue(picker);
+        updateClearButtonVisibility(picker, clearButton);
+        updateSelectAllOption();
+    };
+
+    const onOptionClick = (option) => {
+        if (option === allOption) {
+            const allSelected = options.length > 0 && options.every((item) => item.classList.contains("selected"));
+            options.forEach((item) => item.classList.toggle("selected", !allSelected));
+        } else if (!singleSelect) {
+            option.classList.toggle("selected");
+        } else {
+            options.forEach((item) => {
+                item.classList.toggle("selected", item === option);
+            });
+        }
+
+        updateSelectedState();
+        if (singleSelect) {
+            toggleDropdown(picker, false);
+        }
+    };
+
+    const optionElements = [allOption, ...options];
+    const optionHandlers = optionElements.map((option) => {
+        const handler = () => onOptionClick(option);
         option.addEventListener("click", handler);
         return { option, handler };
     });
+
+    const onClearClick = () => {
+        options.forEach((option) => option.classList.remove("selected"));
+        allOption.classList.remove("selected");
+        updateSelectedState();
+    };
+
+    if (clearButton) {
+        clearButton.addEventListener("click", onClearClick);
+    }
 
     const onDocumentClick = (event) => {
         if (!picker.contains(event.target)) {
@@ -132,6 +218,12 @@ function initializePicker(picker) {
         searchInput.removeEventListener("input", onSearchInput);
         document.removeEventListener("click", onDocumentClick);
         optionHandlers.forEach(({ option, handler }) => option.removeEventListener("click", handler));
+        if (selectAllAction && selectAllHandler) {
+            selectAllAction.removeEventListener("click", selectAllHandler);
+        }
+        if (clearButton) {
+            clearButton.removeEventListener("click", onClearClick);
+        }
     };
 }
 
@@ -201,6 +293,12 @@ export function initFormControls({ root }) {
 
         if (control.matches(".text-input") && !control.closest(".select-picker")) {
             cleanup.push(attachTextControl(control));
+            if (control.dataset.clearable === "true") {
+                const cleanupClear = createClearButtonForInput(control);
+                if (cleanupClear) {
+                    cleanup.push(cleanupClear);
+                }
+            }
         }
 
         if (control.matches(".select-picker")) {

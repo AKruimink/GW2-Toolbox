@@ -93,6 +93,47 @@ label.field-label,
     background-color: rgb(var(--secondary-bg-color));
 }
 
+.input-with-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.field-control {
+    position: static;
+}
+
+.input-with-button .clear-button {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(var(--secondary-bg-color), 0.85);
+    color: rgb(var(--secondary-text-color));
+    font-size: 1rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.input-with-button .clear-button:hover {
+    background: rgba(var(--row-even-color), 0.95);
+}
+
+.input-with-button .text-input {
+    padding-right: 44px;
+}
+
+.clear-button.hidden {
+    display: none;
+}
+
 .select-picker-options {
     max-height: 220px;
     overflow-y: auto;
@@ -119,8 +160,7 @@ label.field-label,
 }
 
 .select-picker-option.selected {
-    font-weight: 600;
-}
+    font-weight: 600;    color: rgb(var(--accent-color));}
 
 .select-picker-option .option-check {
     width: 16px;

@@ -11,22 +11,30 @@
     <div class="section-block search-form-grid">
       <div class="field-control">
         <label class="field-label" for="achievementSearchQuery">Query</label>
-        <input
-          id="achievementSearchQuery"
-          class="text-input"
-          type="text"
-          data-storage-key="gw2toolbox.achievements.query"
-          data-persist="true"
-          placeholder="Search achievements..."
-        />
+        <div class="input-with-button">
+          <input
+            id="achievementSearchQuery"
+            class="text-input"
+            type="text"
+            data-storage-key="gw2toolbox.achievements.query"
+            data-persist="true"
+            data-clearable="true"
+            placeholder="Search achievements..."
+          />
+          <button type="button" class="clear-button hidden" aria-label="Clear query">×</button>
+        </div>
       </div>
 
-      <div class="select-picker" data-storage-key="gw2toolbox.achievements.rewards" data-multiselect="true" data-placeholder="Rewards">
+      <div class="select-picker" data-storage-key="gw2toolbox.achievements.rewards" data-multiselect="true" data-placeholder="Rewards" data-clearable="true">
         <label class="field-label">Rewards</label>
-        <input class="text-input select-picker-input" readonly placeholder="Select rewards..." type="text" />
+        <div class="input-with-button">
+          <input class="text-input select-picker-input" readonly placeholder="Select rewards..." type="text" />
+          <button type="button" class="clear-button hidden" aria-label="Clear rewards selection">×</button>
+        </div>
         <div class="select-picker-dropdown hidden">
           <input class="text-input select-search" type="search" placeholder="Filter rewards..." />
           <ul class="select-picker-options">
+            <li class="select-picker-option select-picker-all" data-action="select-all"><span>Select all</span><span class="option-check"></span></li>
             <li class="select-picker-option" data-value="Titles"><span>Titles</span><span class="option-check"></span></li>
             <li class="select-picker-option" data-value="Masteries"><span>Masteries</span><span class="option-check"></span></li>
             <li class="select-picker-option" data-value="None"><span>None</span><span class="option-check"></span></li>
@@ -35,12 +43,16 @@
         </div>
       </div>
 
-      <div class="select-picker" data-storage-key="gw2toolbox.achievements.show" data-multiselect="true" data-placeholder="Show">
+      <div class="select-picker" data-storage-key="gw2toolbox.achievements.show" data-multiselect="true" data-placeholder="Show" data-clearable="true">
         <label class="field-label">Show</label>
-        <input class="text-input select-picker-input" readonly placeholder="Select status..." type="text" />
+        <div class="input-with-button">
+          <input class="text-input select-picker-input" readonly placeholder="Select status..." type="text" />
+          <button type="button" class="clear-button hidden" aria-label="Clear show selection">×</button>
+        </div>
         <div class="select-picker-dropdown hidden">
           <input class="text-input select-search" type="search" placeholder="Filter statuses..." />
           <ul class="select-picker-options">
+            <li class="select-picker-option select-picker-all" data-action="select-all"><span>Select all</span><span class="option-check"></span></li>
             <li class="select-picker-option" data-value="Started"><span>Started</span><span class="option-check"></span></li>
             <li class="select-picker-option" data-value="Finished"><span>Finished</span><span class="option-check"></span></li>
             <li class="select-picker-option" data-value="Unstarted"><span>Unstarted</span><span class="option-check"></span></li>

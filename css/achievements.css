@@ -1,0 +1,81 @@
+.achievements-content {
+    width: 100%;
+    max-width: 760px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.achievements-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.achievements-empty p,
+.achievements-placeholder p {
+    margin: 0;
+    color: rgb(var(--secondary-text-color));
+    line-height: 1.7;
+    font-size: 1rem;
+}
+
+.action-button {
+    width: fit-content;
+    padding: 12px 18px;
+    border: none;
+    border-radius: 8px;
+    background-color: rgb(var(--accent-color));
+    color: rgb(var(--text-color));
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.action-button:hover,
+.action-button:focus-visible {
+    background-color: rgba(var(--accent-color), 0.85);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.achievements-content {
+    width: 100%;
+    max-width: 760px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.achievements-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.achievements-empty p,
+.achievements-placeholder p {
+    margin: 0;
+    color: rgb(var(--secondary-text-color));
+    line-height: 1.7;
+    font-size: 1rem;
+}
+
+.action-button {
+    width: fit-content;
+    padding: 12px 18px;
+    border: none;
+    border-radius: 8px;
+    background-color: rgb(var(--accent-color));
+    color: rgb(var(--text-color));
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.action-button:hover,
+.action-button:focus-visible {
+    background-color: rgba(var(--accent-color), 0.85);
+    transform: translateY(-1px);
+    outline: none;
+}

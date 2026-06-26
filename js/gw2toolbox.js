@@ -6,7 +6,7 @@ const routes = {
     },
     "/achievements": {
         html: "views/achievements.html",
-        css: ["css/achievements.css", "css/paginator.css"],
+        css: ["css/buttons.css", "css/achievements.css", "css/paginator.css"],
         module: "./achievements.js",
     },
     "/about": {

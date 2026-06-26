@@ -5,10 +5,48 @@
 
   <section class="section-block" id="achievementsSection">
     <div class="section-header">
-      <h2>Achievements</h2>
+      <h2>Search Options</h2>
     </div>
-    <div class="text-body">
-      <p>Your API key is configured. Achievement content will be loaded here once the feature is implemented.</p>
+
+    <div class="section-block search-form-grid">
+      <div class="field-control">
+        <label class="field-label" for="achievementSearchQuery">Query</label>
+        <input
+          id="achievementSearchQuery"
+          class="text-input"
+          type="text"
+          data-storage-key="gw2toolbox.achievements.query"
+          data-persist="true"
+          placeholder="Search achievements..."
+        />
+      </div>
+
+      <div class="select-picker" data-storage-key="gw2toolbox.achievements.rewards" data-multiselect="true" data-placeholder="Rewards">
+        <label class="field-label">Rewards</label>
+        <input class="text-input select-picker-input" readonly placeholder="Select rewards..." type="text" />
+        <div class="select-picker-dropdown hidden">
+          <input class="text-input select-search" type="search" placeholder="Filter rewards..." />
+          <ul class="select-picker-options">
+            <li class="select-picker-option" data-value="Titles"><span>Titles</span><span class="option-check"></span></li>
+            <li class="select-picker-option" data-value="Masteries"><span>Masteries</span><span class="option-check"></span></li>
+            <li class="select-picker-option" data-value="None"><span>None</span><span class="option-check"></span></li>
+            <li class="select-picker-option" data-value="AP"><span>AP</span><span class="option-check"></span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="select-picker" data-storage-key="gw2toolbox.achievements.show" data-multiselect="true" data-placeholder="Show">
+        <label class="field-label">Show</label>
+        <input class="text-input select-picker-input" readonly placeholder="Select status..." type="text" />
+        <div class="select-picker-dropdown hidden">
+          <input class="text-input select-search" type="search" placeholder="Filter statuses..." />
+          <ul class="select-picker-options">
+            <li class="select-picker-option" data-value="Started"><span>Started</span><span class="option-check"></span></li>
+            <li class="select-picker-option" data-value="Finished"><span>Finished</span><span class="option-check"></span></li>
+            <li class="select-picker-option" data-value="Unstarted"><span>Unstarted</span><span class="option-check"></span></li>
+          </ul>
+        </div>
+      </div>
     </div>
   </section>
 

@@ -1,4 +1,5 @@
 import StorageManager from "./storagemanager.js";
+import { initFormControls } from "./form-controls.js";
 
 const STORAGE_KEY = "gw2toolbox.apiKey";
 const API_KEY_PATTERN = /^[A-Za-z0-9]{8}(?:-[A-Za-z0-9]{4}){3}-[A-Za-z0-9]{20}(?:-[A-Za-z0-9]{4}){3}-[A-Za-z0-9]{12}$/;
@@ -113,8 +114,12 @@ export function init({ root }) {
     };
 
     input.addEventListener("input", onInput);
+    const cleanupForm = initFormControls({ root });
 
     return () => {
         input.removeEventListener("input", onInput);
+        if (typeof cleanupForm === "function") {
+            cleanupForm();
+        }
     };
 }

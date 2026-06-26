@@ -21,7 +21,7 @@
 }
 
 .text-input::placeholder {
-    color: rgb(var(--secondary-text-color));
+    color: rgba(var(--secondary-text-color), 0.65);
 }
 
 .validation-tooltip {

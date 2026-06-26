@@ -328,6 +328,7 @@ export function init({ root }) {
     const initializePaginator = () => {
         paginator = new Paginator({
             container: paginatorContainer,
+            storageKey: "gw2toolbox.achievements.pageSize",
             columns: [
                 {
                     title: "",
@@ -406,7 +407,6 @@ export function init({ root }) {
                     },
                 },
             ],
-            pageSizes: [10, 25, 50, 100],
             defaultPageSize: 25,
             detailsEnabled: true,
             detailFormatter: (item) => formatObjectives(item),

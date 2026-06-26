@@ -1,3 +1,5 @@
+import StorageManager from "./storagemanager.js";
+
 export class Paginator {
     /**
      * @typedef {Object} PaginatorOptions
@@ -19,14 +21,21 @@ export class Paginator {
         this.container = options.container;
         this.columns = options.columns || [];
         this.pageSizes = options.pageSizes || [10, 25, 50, 100, 500, 1000, -1];
+        this.storageKey = options.storageKey || null;
 
         this.rowClassFn = options.rowClassFn || null;
         this.detailFormatter = options.detailFormatter || null;
         this.detailsEnabled = options.detailsEnabled !== undefined ? options.detailsEnabled : true;
         this.searchProperty = options.searchProperty || null;
 
+        const savedPageSize = this.storageKey
+            ? Number(StorageManager.getItem(this.storageKey, ""))
+            : NaN;
+
         this.currentPageSize =
-            options.defaultPageSize && this.pageSizes.includes(options.defaultPageSize)
+            Number.isInteger(savedPageSize) && this.pageSizes.includes(savedPageSize)
+                ? savedPageSize
+                : options.defaultPageSize && this.pageSizes.includes(options.defaultPageSize)
                 ? options.defaultPageSize
                 : this.pageSizes[0];
 
@@ -274,6 +283,9 @@ export class Paginator {
             pageSizeSelect.addEventListener("change", () => {
                 const size = Number(pageSizeSelect.value);
                 this.currentPageSize = size;
+                if (this.storageKey) {
+                    StorageManager.setItem(this.storageKey, String(size));
+                }
                 this.currentPage = 1;
                 this.render();
             });

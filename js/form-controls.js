@@ -166,6 +166,7 @@ function initializePicker(picker) {
         persistControlValue(picker);
         updateClearButtonVisibility(picker, clearButton);
         updateSelectAllOption();
+        picker.dispatchEvent(new Event("change", { bubbles: true }));
     };
 
     const onOptionClick = (option) => {
@@ -218,9 +219,6 @@ function initializePicker(picker) {
         searchInput.removeEventListener("input", onSearchInput);
         document.removeEventListener("click", onDocumentClick);
         optionHandlers.forEach(({ option, handler }) => option.removeEventListener("click", handler));
-        if (selectAllAction && selectAllHandler) {
-            selectAllAction.removeEventListener("click", selectAllHandler);
-        }
         if (clearButton) {
             clearButton.removeEventListener("click", onClearClick);
         }

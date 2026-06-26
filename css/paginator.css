@@ -1,0 +1,86 @@
+.paginator-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.paginator-controls label {
+    color: rgb(var(--secondary-text-color));
+    font-size: 0.95rem;
+}
+
+.paginator-controls select,
+.paginator-controls input {
+    min-width: 140px;
+    padding: 10px 12px;
+    border: 1px solid rgb(var(--border-color));
+    border-radius: 10px;
+    background-color: rgb(var(--secondary-bg-color));
+    color: rgb(var(--primary-text-color));
+}
+
+.paginator-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 16px;
+}
+
+.paginator-table th,
+.paginator-table td {
+    padding: 0;
+    border: none;
+    vertical-align: top;
+}
+
+.page-numbers button,
+.page-prev,
+.page-next {
+    padding: 8px 12px;
+    margin: 0 2px;
+    border: 1px solid rgb(var(--border-color));
+    border-radius: 8px;
+    background-color: rgb(var(--secondary-bg-color));
+    color: rgb(var(--primary-text-color));
+    cursor: pointer;
+}
+
+.page-numbers button:disabled,
+.page-prev:disabled,
+.page-next:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.page-ellipsis {
+    display: inline-block;
+    padding: 8px 10px;
+    color: rgb(var(--secondary-text-color));
+}
+
+.paginator-info {
+    color: rgb(var(--secondary-text-color));
+    font-size: 0.95rem;
+}
+
+.paginator-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.detail-container td {
+    padding: 0;
+}
+
+.details-control {
+    cursor: pointer;
+}
+
+.toggle-icon {
+    margin-right: 8px;
+}

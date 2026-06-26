@@ -1,8 +1,8 @@
 import StorageManager from "./storagemanager.js";
 
 const STORAGE_KEY = "gw2toolbox.apiKey";
-const API_KEY_PATTERN = /^[A-Za-z0-9]{8}(?:-[A-Za-z0-9]{4}){3}-[A-Za-z0-9]{24}(?:-[A-Za-z0-9]{4}){3}-[A-Za-z0-9]{24}$/;
-const FORMAT_GROUPS = [8, 4, 4, 4, 24, 4, 4, 4, 24];
+const API_KEY_PATTERN = /^[A-Za-z0-9]{8}(?:-[A-Za-z0-9]{4}){3}-[A-Za-z0-9]{20}(?:-[A-Za-z0-9]{4}){3}-[A-Za-z0-9]{12}$/;
+const FORMAT_GROUPS = [8, 4, 4, 4, 20, 4, 4, 4, 12];
 
 function stripKey(value) {
     return value.replace(/[^A-Za-z0-9]/g, "");

@@ -1,3 +1,21 @@
+/**
+ * GW2 Toolbox Main Router & Application Loader
+ * 
+ * Manages single-page application (SPA) navigation with:
+ * - Hash-based routing (#/home, #/achievements, #/about)
+ * - Dynamic view loading (HTML, CSS, JS modules)
+ * - Resource cleanup on route change (prevents memory leaks)
+ * - Theme toggle (light/dark mode)
+ */
+
+// ========== ROUTE DEFINITIONS ==========
+/**
+ * Route configuration map.
+ * Each route specifies:
+ * - html: Template file to load
+ * - css: Stylesheets to load (only when this route is active)
+ * - module: JavaScript module with init() function (optional)
+ */
 const routes = {
     "/home": {
         html: "views/home.html",
@@ -16,8 +34,13 @@ const routes = {
     },
 };
 
+// ========== APPLICATION STATE ==========
 const appElement = document.getElementById("content");
 
+/**
+ * Current route state tracking.
+ * Keeps track of loaded CSS, cleanup function, and route for cleanup on navigation.
+ */
 let currentRoute = {
     route: null,
     cleanup: null,
@@ -25,9 +48,11 @@ let currentRoute = {
 };
 
 /**
- * Ensures a valid route, defaulting to "/achievements" when missing/unknown.
- * @param {string} route Route candidate (e.g. "/about").
- * @returns {string} A normalized route that exists in the routes map.
+ * Validates and normalizes a route string.
+ * Defaults to "/home" for unknown/missing routes.
+ * 
+ * @param {string} route - Route candidate (e.g. "/about")
+ * @returns {string} Valid route that exists in routes map
  */
 function normalizeRoute(route) {
     if (!route) {
@@ -38,8 +63,10 @@ function normalizeRoute(route) {
 }
 
 /**
- * Reads the current location hash and converts it into a normalized route string.
- * @returns {string} Normalized route derived from window.location.hash.
+ * Extracts the current route from window.location.hash.
+ * Hash format: #/route-name
+ * 
+ * @returns {string} Normalized route string
  */
 function getRouteFromHash() {
     const hash = window.location.hash || "#/achievements";
@@ -49,8 +76,10 @@ function getRouteFromHash() {
 }
 
 /**
- * Updates the navbar UI so the active tab matches the current route.
- * @param {string} route Normalized route string.
+ * Updates navbar active tab styling to match current route.
+ * Adds "active" class to matching tab, removes from others.
+ * 
+ * @param {string} route - Current normalized route
  * @returns {void}
  */
 function setActiveTab(route) {
@@ -61,8 +90,10 @@ function setActiveTab(route) {
 }
 
 /**
- * Dynamically attaches a stylesheet link once per view CSS href.
- * @param {string} href Stylesheet href to attach.
+ * Dynamically loads a stylesheet link into the page if not already loaded.
+ * Used to load route-specific CSS without bundling everything globally.
+ * 
+ * @param {string} href - Stylesheet URL or path
  * @returns {void}
  */
 function loadCss(href) {
@@ -79,8 +110,10 @@ function loadCss(href) {
 }
 
 /**
- * Removes a dynamically-attached view stylesheet link (if present).
- * @param {string} href Stylesheet href to remove.
+ * Removes a dynamically-loaded view stylesheet from the page.
+ * Called during cleanup to avoid CSS bloat when switching routes.
+ * 
+ * @param {string} href - Stylesheet URL or path to remove
  * @returns {void}
  */
 function unloadCss(href) {
@@ -91,9 +124,17 @@ function unloadCss(href) {
 }
 
 /**
- * Loads a route's HTML/CSS/modules, swaps the DOM, runs init(), and cleans up prior view resources.
- * View modules may export an init({ root }) function that optionally returns a cleanup function.
- * @param {string} route Normalized route string.
+ * Loads a route's resources and initializes the view.
+ * 
+ * Process:
+ * 1. Loads route-specific CSS
+ * 2. Fetches and parses route HTML template
+ * 3. Runs cleanup from previous view (unbinds listeners, destroys components)
+ * 4. Swaps new HTML into DOM
+ * 5. Imports and runs module's init() function
+ * 6. Unloads CSS no longer needed by new route
+ * 
+ * @param {string} route - Normalized route string
  * @returns {Promise<void>}
  */
 async function loadView(route) {
@@ -121,11 +162,12 @@ async function loadView(route) {
     const nextHtml = await response.text();
 
     // Cleanup the old view
+    // This calls any cleanup functions returned by the previous module's init()
     if (typeof previousCleanup === "function") {
         try {
             previousCleanup();
         } catch {
-            /* ignore */
+            /* ignore cleanup errors */
         }
     }
 
@@ -166,7 +208,9 @@ async function loadView(route) {
 }
 
 /**
- * Handles hash changes by closing any open nav dropdown and loading the new route.
+ * Handles hash change events and initiates route loading.
+ * Also closes any open navigation dropdown.
+ * 
  * @returns {void}
  */
 function onRouteChange() {
@@ -179,6 +223,7 @@ function onRouteChange() {
     void loadView(route);
 }
 
+// ========== INITIAL SETUP ==========
 window.addEventListener("hashchange", onRouteChange);
 
 if (!window.location.hash) {
@@ -188,7 +233,9 @@ if (!window.location.hash) {
 onRouteChange();
 
 /**
- * Initializes the theme toggle button (light/dark) and persists preference in localStorage.
+ * Initializes the theme toggle button for light/dark mode.
+ * Persists theme preference to localStorage.
+ * 
  * @returns {void}
  */
 function setupThemeToggle() {

@@ -1,5 +1,21 @@
+/**
+ * Form Controls Module
+ * 
+ * Provides form component management with persistence features:
+ * - Text input persistence (saves to localStorage)
+ * - Multi-select picker component with filtering
+ * - Automatic clear buttons
+ * - Validation hooks
+ * - State restoration on page load
+ */
+
 import StorageManager from "./storagemanager.js";
 
+// ========== VALUE GETTER/SETTER PATTERNS ==========
+/**
+ * Maps control types to functions that extract their current values.
+ * Used for getting form state before persisting.
+ */
 const defaultValueGetters = {
     text: (element) => element.value,
     multi: (element) => {
@@ -8,6 +24,10 @@ const defaultValueGetters = {
     },
 };
 
+/**
+ * Maps control types to functions that set their values.
+ * Used for restoring form state from storage.
+ */
 const valueSetters = {
     text: (element, value) => {
         element.value = value;
@@ -22,18 +42,45 @@ const valueSetters = {
     },
 };
 
+// ========== HELPER FUNCTIONS ==========
+
+/**
+ * Extracts storage key from element's data attribute.
+ * Storage key determines where form value is persisted in localStorage.
+ * @param {HTMLElement} element - Form control element
+ * @returns {string|undefined} Storage key or undefined if not set
+ */
 function getStorageKey(element) {
     return element.dataset.storageKey;
 }
 
+/**
+ * Checks if element should persist its value to localStorage.
+ * Default is true unless explicitly set to "false".
+ * @param {HTMLElement} element - Form control element
+ * @returns {boolean} Whether to persist this control
+ */
 function getPersist(element) {
     return element.dataset.persist !== "false";
 }
 
+/**
+ * Gets a validation function by name from window scope.
+ * Allows HTML to reference validation functions: data-validation="validateApiKey"
+ * @param {string} name - Function name to look up
+ * @returns {function|null} Validation function or null
+ */
 function getValidationFn(name) {
     return name ? window[name] : null;
 }
 
+/**
+ * Updates the display label of a multi-select picker to show selected items.
+ * Shows placeholder text if nothing is selected.
+ * 
+ * @param {HTMLElement} root - Select picker element
+ * @returns {void}
+ */
 function updatePickerLabel(root) {
     const selected = Array.from(root.querySelectorAll(".select-picker-option.selected")).map((option) => option.textContent.trim());
     const input = root.querySelector(".select-picker-input");
@@ -50,6 +97,12 @@ function updatePickerLabel(root) {
     }
 }
 
+/**
+ * Shows or hides the clear button based on whether the control has a value.
+ * @param {HTMLElement} root - Form control container
+ * @param {HTMLElement} clearButton - Clear button element
+ * @returns {void}
+ */
 function updateClearButtonVisibility(root, clearButton) {
     if (!clearButton) {
         return;
@@ -62,6 +115,13 @@ function updateClearButtonVisibility(root, clearButton) {
     clearButton.classList.toggle("hidden", !hasValue);
 }
 
+/**
+ * Creates and configures a clear button for text/picker inputs.
+ * Button is shown/hidden based on input value, clears on click.
+ * 
+ * @param {HTMLElement} input - Input element to attach clear button to
+ * @returns {function|null} Cleanup function or null if not clearable
+ */
 function createClearButtonForInput(input) {
     const shouldClear = input.dataset.clearable === "true";
     if (!shouldClear) {
@@ -107,6 +167,11 @@ function toggleDropdown(root, open) {
     dropdown.classList.toggle("hidden", !open);
 }
 
+/**
+ * Closes all open multi-select picker dropdowns on the page.
+ * Used to ensure only one picker is open at a time (click-away behavior).
+ * @returns {void}
+ */
 function closeAllPickers() {
     document.querySelectorAll(".select-picker").forEach((picker) => {
         const dropdown = picker.querySelector(".select-picker-dropdown");
@@ -116,6 +181,13 @@ function closeAllPickers() {
     });
 }
 
+/**
+ * Filters picker options to show only those matching the search query.
+ * Uses case-insensitive substring matching on option text.
+ * @param {HTMLElement} root - Select picker element
+ * @param {string} query - Search query string
+ * @returns {void}
+ */
 function filterOptions(root, query) {
     const normalized = query.trim().toLowerCase();
     root.querySelectorAll(".select-picker-option").forEach((option) => {
@@ -124,6 +196,20 @@ function filterOptions(root, query) {
     });
 }
 
+/**
+ * Initializes a multi-select picker component with full functionality.
+ * 
+ * Features:
+ * - Toggle dropdown on input click
+ * - Search/filter options in dropdown
+ * - Single-select or multi-select modes
+ * - "Select all" / "Deselect all" option
+ * - Click-away to close dropdown
+ * - Persists selections to localStorage
+ * 
+ * @param {HTMLElement} picker - Select picker element
+ * @returns {function} Cleanup function to remove event listeners
+ */
 function initializePicker(picker) {
     const singleSelect = picker.dataset.multiselect !== "true";
     const input = picker.querySelector(".select-picker-input");
@@ -137,6 +223,7 @@ function initializePicker(picker) {
         return () => {};
     }
 
+    // Determine if all options are selected, update "Select all" label accordingly
     const updateSelectAllOption = () => {
         const allSelected = options.length > 0 && options.every((option) => option.classList.contains("selected"));
         allOption.classList.toggle("selected", allSelected);
@@ -161,6 +248,7 @@ function initializePicker(picker) {
         filterOptions(picker, searchInput.value);
     };
 
+    // Called whenever selection changes - updates label, persists, fires change event
     const updateSelectedState = () => {
         updatePickerLabel(picker);
         persistControlValue(picker);
@@ -171,11 +259,14 @@ function initializePicker(picker) {
 
     const onOptionClick = (option) => {
         if (option === allOption) {
+            // Toggle all options based on current state
             const allSelected = options.length > 0 && options.every((item) => item.classList.contains("selected"));
             options.forEach((item) => item.classList.toggle("selected", !allSelected));
         } else if (!singleSelect) {
+            // Multi-select: toggle individual option
             option.classList.toggle("selected");
         } else {
+            // Single-select: select only this option, deselect others
             options.forEach((item) => {
                 item.classList.toggle("selected", item === option);
             });
@@ -204,6 +295,7 @@ function initializePicker(picker) {
         clearButton.addEventListener("click", onClearClick);
     }
 
+    // Click anywhere outside picker to close dropdown
     const onDocumentClick = (event) => {
         if (!picker.contains(event.target)) {
             toggleDropdown(picker, false);
@@ -214,6 +306,7 @@ function initializePicker(picker) {
     searchInput.addEventListener("input", onSearchInput);
     document.addEventListener("click", onDocumentClick);
 
+    // Return cleanup function to unbind all listeners
     return () => {
         input.removeEventListener("click", onInputClick);
         searchInput.removeEventListener("input", onSearchInput);
@@ -225,6 +318,20 @@ function initializePicker(picker) {
     };
 }
 
+/**
+ * Persists a form control's value to localStorage.
+ * 
+ * For text inputs:
+ * - Runs optional validation function first
+ * - Only persists if validation passes
+ * - Removes from storage if value is empty
+ * 
+ * For multi-select pickers:
+ * - Stores as JSON array of selected values
+ * 
+ * @param {HTMLElement} element - Form control to persist
+ * @returns {void}
+ */
 export function persistControlValue(element) {
     const key = getStorageKey(element);
     if (!key || !getPersist(element)) {
@@ -257,6 +364,18 @@ export function persistControlValue(element) {
     StorageManager.setItem(key, value);
 }
 
+/**
+ * Restores a form control's value from localStorage.
+ * 
+ * For text inputs:
+ * - Retrieves string value and sets to element
+ * 
+ * For multi-select pickers:
+ * - Retrieves JSON array and marks matching options as selected
+ * 
+ * @param {HTMLElement} element - Form control to restore
+ * @returns {void}
+ */
 export function restoreControlValue(element) {
     const key = getStorageKey(element);
     if (!key) {
@@ -275,6 +394,11 @@ export function restoreControlValue(element) {
     }
 }
 
+/**
+ * Attaches input listener to a text control to persist on every change.
+ * @param {HTMLElement} input - Text input element
+ * @returns {function} Cleanup function to remove listener
+ */
 function attachTextControl(input) {
     const onInput = () => persistControlValue(input);
     input.addEventListener("input", onInput);
@@ -282,13 +406,28 @@ function attachTextControl(input) {
     return () => input.removeEventListener("input", onInput);
 }
 
+/**
+ * Initializes all form controls within a root element.
+ * 
+ * Handles:
+ * - Restoration of persisted values on load
+ * - Setup of event listeners for persistence
+ * - Initialization of multi-select pickers
+ * - Creation of clear buttons
+ * 
+ * @param {object} options - Initialization options
+ * @param {HTMLElement} options.root - Root element containing form controls
+ * @returns {function} Cleanup function called on route change
+ */
 export function initFormControls({ root }) {
     const controls = Array.from(root.querySelectorAll("[data-storage-key]"));
     const cleanup = [];
 
     controls.forEach((control) => {
+        // Restore persisted value first
         restoreControlValue(control);
 
+        // Setup text input persistence and clear button
         if (control.matches(".text-input") && !control.closest(".select-picker")) {
             cleanup.push(attachTextControl(control));
             if (control.dataset.clearable === "true") {
@@ -299,10 +438,12 @@ export function initFormControls({ root }) {
             }
         }
 
+        // Setup multi-select picker
         if (control.matches(".select-picker")) {
             cleanup.push(initializePicker(control));
         }
     });
 
+    // Return cleanup function that unbinds all listeners
     return () => cleanup.forEach((fn) => fn());
 }

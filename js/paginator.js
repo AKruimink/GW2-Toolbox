@@ -1,3 +1,33 @@
+/**
+ * Paginator Component Class
+ * 
+ * A reusable, feature-rich table component for displaying paginated data.
+ * 
+ * Features:
+ * - Configurable columns with custom render functions
+ * - Sorting (click column header)
+ * - Pagination with configurable page sizes
+ * - Built-in search/filter
+ * - Expandable detail rows
+ * - Persistent page size preference
+ * - Responsive pagination button management
+ * 
+ * Usage:
+ * ```
+ * const paginator = new Paginator({
+ *   container: document.getElementById("table"),
+ *   columns: [
+ *     { title: "Name", data: "name", sortable: true },
+ *     { title: "Details", data: "details", render: (val, row) => `<strong>${val}</strong>` }
+ *   ],
+ *   defaultPageSize: 25,
+ *   detailsEnabled: true,
+ *   detailFormatter: (row) => `<p>Details for ${row.name}</p>`
+ * });
+ * paginator.setData(dataArray);
+ * ```
+ */
+
 import StorageManager from "./storagemanager.js";
 
 export class Paginator {
@@ -15,7 +45,10 @@ export class Paginator {
 
     /**
      * Constructs a new Paginator instance.
-     * @param {PaginatorOptions} options
+     * 
+     * Initializes state, loads persisted page size from storage, and builds DOM structure.
+     * 
+     * @param {PaginatorOptions} options Configuration object
      */
     constructor(options) {
         this.container = options.container;
@@ -104,7 +137,10 @@ export class Paginator {
     }
 
     /**
-     * Renders the table body, info text, and pagination controls.
+     * Renders the full paginator: filters, sorts, paginates, and displays rows.
+     * Also updates pagination controls (page numbers, prev/next buttons, info text).
+     * 
+     * This is the main re-render method called whenever filters, sort, or page changes.
      * @returns {void}
      */
     render() {
@@ -376,10 +412,15 @@ export class Paginator {
     }
 
     /**
-     * Returns a sorted clone of the provided array based on current sort state.
-     * Sorting behavior matches the existing implementation (including null ordering).
-     * @param {Array} input
-     * @returns {Array}
+     * Sorts data array based on current sort column and direction.
+     * 
+     * Sorting rules:
+     * - null/undefined values always appear first (regardless of sort direction)
+     * - Strings sorted case-insensitive
+     * - Numbers and other types use natural comparison
+     * 
+     * @param {Array} input - Data array to sort
+     * @returns {Array} New sorted array (doesn't mutate input)
      */
     getSortedData(input) {
         const data = Array.from(input);

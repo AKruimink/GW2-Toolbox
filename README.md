@@ -1,11 +1,16 @@
-<div align="center">
-    <a href="https://akruimink.github.io/GW2-Toolbox/">
-        <img src="docs/gw2-toolbox-round.svg" alt="GW2 Toolbox" height="200" width="200">
-    </a>
-    <h1> GW2 Toolbox</h1>
-    <p>
-        A collection of useful tools for <strong>Guild Wars 2</strong> players, available directly in your browser.
-    </p>
+<div align="center"> 
+    <a href="https://akruimink.github.io/GW2-Toolbox/" target="_blank" rel="noopener noreferrer"> 
+        <img src="docs/gw2-toolbox-round.svg" alt="GW2 Toolbox" height="200" width="200"> 
+    </a> 
+    <h1>GW2 Toolbox</h1> 
+    <p> 
+        A collection of useful tools for <strong>Guild Wars 2</strong> players, available directly in your browser. 
+    </p> 
+    <p> 
+        <a href="https://akruimink.github.io/GW2-Toolbox/" target="_blank" rel="noopener noreferrer"> 
+            <strong>Open GW2 Toolbox</strong> 
+        </a> 
+    </p> 
 </div>
 
 ## About

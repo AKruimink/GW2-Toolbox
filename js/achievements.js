@@ -1,572 +1,895 @@
-/**
- * Achievements Module
- * 
- * Handles loading, caching, filtering, and rendering Guild Wars 2 achievements.
- * Features:
- * - Intelligent caching with stale-while-revalidate pattern
- * - Batch loading from GW2 API (200 at a time, 4 concurrent workers)
- * - Real-time filtering by query, rewards, and completion status
- * - Custom card-based pagination
- * - Persistent filter preferences
- */
-
 import StorageManager from "./storagemanager.js";
 import { initFormControls } from "./form-controls.js";
 import Paginator from "./paginator.js";
+import { buildWikiFileUrl, buildWikiUrl, chunkArray, fetchByIdsInBatches, fetchJson, gw2ApiUrl } from "./api-client.js";
 
-// ========== STORAGE & CACHE CONFIGURATION ==========
 const STORAGE_KEY = "gw2toolbox.apiKey";
-const ACHIEVEMENTS_CACHE_KEY = "gw2toolbox.achievementsCache";
+const CACHE_KEY = "gw2toolbox.achievements.v3";
+const REWARDS_STORAGE_KEY = "gw2toolbox.achievements.rewards";
+const SHOW_STORAGE_KEY = "gw2toolbox.achievements.show";
 
-/** Cache is fresh for 15 minutes - use cached data immediately */
-const CACHE_TTL = 15 * 60 * 1000;
-/** Cache can be used for up to 30 minutes - refresh in background */
-const CACHE_STALE_TTL = 30 * 60 * 1000;
-
-// ========== API ENDPOINTS & BATCHING ==========
-const API_BASE = "https://api.guildwars2.com/v2";
-const WIKI_BASE = "https://wiki.guildwars2.com/wiki/";
-/** Achievements loaded per API request (max 200 per GW2 API) */
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const ACHIEVEMENT_BATCH_SIZE = 200;
-/** Number of parallel batch requests to process simultaneously */
-const BATCH_CONCURRENCY = 4;
+const REFRESH_BATCH_SIZE = 120;
 
-/**
- * Converts achievement names to URL-safe slugs for wiki links.
- * Replaces spaces with underscores and removes special characters.
- * @param {string} value - Achievement name to slugify
- * @returns {string} URL-encoded slug suitable for wiki URLs
- */
-function slugifyForWiki(value) {
-    return encodeURIComponent(String(value).trim().replace(/\s+/g, "_").replace(/[:\/\\?#%\[\] ]+/g, "_"));
+const MASTERY_REGION_ICON_FILE = {
+    Tyria: "Mastery_point_(Central_Tyria).png",
+    Maguuma: "Mastery_point_(Heart_of_Thorns).png",
+    Desert: "Mastery_point_(Path_of_Fire).png",
+    Tundra: "Mastery_point_(Icebrood_Saga).png",
+    Cantha: "Mastery_point_(End_of_Dragons).png",
+    Jade: "Mastery_point_(End_of_Dragons).png",
+    Sky: "Mastery_point_(Secrets_of_the_Obscure).png",
+    Lowland: "Mastery_point_(Janthir_Wilds).png",
+    Unknown: "Mastery_point_(Central_Tyria).png",
+};
+
+function nowMs() {
+    return Date.now();
 }
 
-/**
- * Builds a wiki URL for an achievement or item name.
- * Example: "Ascended Armor" → "https://wiki.guildwars2.com/wiki/Ascended_Armor"
- * @param {string} value - Name to link to
- * @returns {string} Full wiki URL
- */
-function buildWikiUrl(value) {
-    return `${WIKI_BASE}${slugifyForWiki(value)}`;
-}
-
-/**
- * Fetches and parses JSON from an API endpoint.
- * Throws descriptive error with status code and body on failure.
- * @param {string} url - API endpoint URL
- * @param {object} [options={}] - Fetch options (headers, method, etc.)
- * @returns {Promise<object>} Parsed JSON response
- * @throws {Error} With HTTP status and response body
- */
-async function fetchJson(url, options = {}) {
-    const response = await fetch(url, options);
-    if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}${body ? ` — ${body}` : ""}`);
-    }
-    return response.json();
-}
-
-/**
- * Splits an array into smaller chunks of specified size.
- * Used to batch achievements into API-friendly request sizes.
- * @param {array} items - Array to split
- * @param {number} size - Size of each chunk
- * @returns {array[]} Array of chunked arrays
- */
-function chunkArray(items, size) {
-    const chunks = [];
-    for (let i = 0; i < items.length; i += size) {
-        chunks.push(items.slice(i, i + size));
-    }
-    return chunks;
-}
-
-/**
- * Fetches achievement details in parallel batches with progress reporting.
- * 
- * Processing:
- * - Splits achievement IDs into batches of ACHIEVEMENT_BATCH_SIZE (200)
- * - Processes BATCH_CONCURRENCY (4) batches in parallel for speed
- * - After each batch completes, reports progress via onProgress callback
- * - Maintains result order despite parallel execution
- * 
- * @param {number[]} ids - All achievement IDs to fetch
- * @param {object} accountMap - Map of achievement ID → user's account progress
- * @param {object} categories - Map of category ID → category metadata
- * @param {object} groups - Map of group ID → group metadata
- * @param {function} [onProgress] - Called after each batch: (rows, totalIds, isComplete)
- * @returns {Promise<object[]>} Array of transformed achievement rows
- */
-async function fetchAchievementDetailsInBatches(ids, accountMap, categories, groups, onProgress) {
-    const batches = chunkArray(ids, ACHIEVEMENT_BATCH_SIZE);
-    const queue = batches.map((batch, index) => ({ batch, index }));
-    const resultsByIndex = new Array(batches.length);
-
-    // Worker function: processes batches from queue in order as they're available
-    const worker = async () => {
-        while (queue.length > 0) {
-            const item = queue.shift();
-            const results = await fetchJson(`${API_BASE}/achievements?ids=${item.batch.join(",")}`);
-            const rows = Array.isArray(results)
-                ? results.map((achievement) => buildAchievementRow(achievement, accountMap, categories, groups))
-                : [];
-
-            resultsByIndex[item.index] = rows;
-            const availableRows = resultsByIndex.filter(Boolean).flat();
-            if (typeof onProgress === "function") {
-                onProgress(availableRows, ids.length, queue.length === 0);
-            }
-        }
-    };
-
-    // Spawn BATCH_CONCURRENCY workers - they all pull from the same queue
-    const workers = Array.from({ length: Math.min(BATCH_CONCURRENCY, queue.length) }, () => worker());
-    await Promise.all(workers);
-    return resultsByIndex.flat();
-}
-
-/**
- * Fetches all achievement data from the GW2 API.
- * 
- * Parallel fetches:
- * 1. All achievement categories (for names/hierarchy)
- * 2. All achievement groups (for organization)
- * 3. All achievement IDs (available to the player)
- * 4. Account's personal achievement progress
- * 
- * Then transforms all this data into display-ready rows using buildAchievementRow().
- * 
- * @param {string} apiKey - Valid GW2 API key with achievements permission
- * @param {function} [onProgress] - Called during batch loading: (rows, totalIds, isComplete)
- * @returns {Promise<object[]>} Array of achievement rows with all data merged
- */
-async function fetchAllAchievementDetails(apiKey, onProgress = () => {}) {
-    // Parallel requests for independent data
-    const [categories, groups, ids, accountAchievements] = await Promise.all([
-        fetchJson(`${API_BASE}/achievements/categories?ids=all`),
-        fetchJson(`${API_BASE}/achievements/groups?ids=all`),
-        fetchJson(`${API_BASE}/achievements`),
-        fetchJson(`${API_BASE}/account/achievements?access_token=${encodeURIComponent(apiKey)}`),
-    ]);
-
-    // Convert arrays to maps for O(1) lookup during row building
-    const categoryMap = (categories || []).reduce((map, item) => {
-        map[item.id] = item;
-        return map;
-    }, {});
-
-    const groupMap = (groups || []).reduce((map, item) => {
-        map[item.id] = item;
-        return map;
-    }, {});
-
-    // Account achievements indexed by achievement ID for quick progress lookup
-    const accountMap = (accountAchievements || []).reduce((map, row) => {
-        map[row.id] = row;
-        return map;
-    }, {});
-
-    const rows = await fetchAchievementDetailsInBatches(ids, accountMap, categoryMap, groupMap, onProgress);
-    return rows;
-}
-
-/**
- * Retrieves cached achievements if still valid for the current API key.
- * 
- * Validation:
- * - Cache must exist
- * - API key in cache must match current API key (invalidate on key change)
- * - Data must be an array
- * - Timestamp must be a number
- * 
- * @param {string} apiKey - Current API key to validate cache against
- * @returns {object|null} Cache object with {apiKey, timestamp, data:[]} or null if invalid
- */
-function getCachedAchievements(apiKey) {
-    const cache = StorageManager.getJson(ACHIEVEMENTS_CACHE_KEY, null);
-    if (!cache || cache.apiKey !== apiKey || !Array.isArray(cache.data) || typeof cache.timestamp !== "number") {
-        return null;
-    }
-
-    return cache;
-}
-
-/**
- * Saves achievements to cache with current timestamp.
- * Cache format: {apiKey, timestamp, data: [...achievements]}
- * 
- * @param {string} apiKey - API key used to fetch this data
- * @param {object[]} data - Array of achievement rows to cache
- * @returns {void}
- */
-function setCachedAchievements(apiKey, data) {
-    StorageManager.setJson(ACHIEVEMENTS_CACHE_KEY, {
-        apiKey,
-        timestamp: Date.now(),
-        data,
-    });
-}
-
-/**
- * Extracts selected values from a multi-select picker element.
- * Filters out the "Select all" option which uses different class.
- * 
- * @param {HTMLElement} picker - Multi-select picker element
- * @returns {string[]} Array of selected option values
- */
 function getSelectedValues(picker) {
     if (!picker) return [];
 
     return Array.from(picker.querySelectorAll(".select-picker-option.selected:not(.select-picker-all)"))
-        .map((option) => option.dataset.value);
+        .map((option) => option.dataset.value)
+        .filter(Boolean);
 }
 
-/**
- * Calculates achievement status based on account progress.
- * 
- * Status logic:
- * - "Finished": done flag is true
- * - "Started": current progress > 0 OR any individual bit (objective) > 0
- * - "Unstarted": no progress at all
- * 
- * Used for filtering achievements by completion state.
- * 
- * @param {object} accountRow - User's progress on this achievement from account API
- * @returns {string} One of: "Finished", "Started", "Unstarted"
- */
 function getAchievementStatus(accountRow) {
     if (!accountRow) return "Unstarted";
     if (accountRow.done) return "Finished";
-    if (accountRow.current || (Array.isArray(accountRow.bits) && accountRow.bits.some((value) => value > 0))) return "Started";
+    if (accountRow.current > 0 || (Array.isArray(accountRow.bits) && accountRow.bits.length > 0)) return "Started";
     return "Unstarted";
 }
 
-/**
- * Normalizes reward data from API into consistent display format.
- * 
- * Handles various reward types:
- * - AP: Achievement Points
- * - Coin: Gold/Silver/Copper currency
- * - Item: Tradeable items (shows quantity if > 1)
- * - Mastery: Mastery points
- * - Title: Account titles
- * - Generic: Any other reward type
- * 
- * Returns an object with human-readable label and wiki link when applicable.
- * 
- * @param {object} reward - Reward object from API
- * @param {string} [reward.type] - Reward type (AP, Coin, Item, etc.)
- * @param {string} [reward.id] - Item/reward ID
- * @param {string} [reward.name] - Reward name
- * @param {number} [reward.count] - Quantity (for items/currency)
- * @returns {{label: string, link: string|null}} Formatted reward with optional wiki link
- */
-function normalizeReward(reward) {
-    if (!reward || typeof reward !== "object") {
-        return { label: "Unknown", link: null };
+function calculatePoints(tiers, accountState) {
+    const tierList = Array.isArray(tiers) ? tiers : [];
+    if (tierList.length === 0) return { earned: 0, max: 0 };
+
+    const max = Number(tierList[tierList.length - 1]?.points || 0);
+
+    if (accountState?.done) {
+        return { earned: max, max };
     }
 
-    let label = reward.id || reward.name || reward.type || "Reward";
-    if (reward.type === "AP") {
-        label = "AP";
-    } else if (reward.type === "Coin") {
-        label = `${reward.count || 0} coins`;
-    } else if (reward.type === "Item") {
-        if (reward.count) {
-            label = `${reward.count}× ${reward.id ?? reward.name ?? "Item"}`;
+    const current = Number(accountState?.current || 0);
+    let earned = 0;
+
+    for (const tier of tierList) {
+        if (current >= Number(tier?.count || 0)) {
+            earned = Number(tier?.points || earned);
+        } else {
+            break;
         }
     }
 
-    const labelText = String(label || "");
+    return { earned, max };
+}
+
+function calculateObjectives(bits, accountBits) {
+    const bitRows = Array.isArray(bits) ? bits : [];
+    const progressRows = Array.isArray(accountBits) ? accountBits : [];
+
+    let completed = 0;
+
+    bitRows.forEach((bit, index) => {
+        const goal = Number(bit?.value || 0);
+        const current = Number(progressRows[index] || 0);
+        const isComplete = goal > 0 ? current >= goal : current > 0;
+
+        if (isComplete) {
+            completed += 1;
+        }
+    });
+
+    const total = bitRows.length;
+
     return {
-        label: labelText,
-        link: labelText ? buildWikiUrl(labelText.replace(/^\d+×\s*/, "")) : null,
+        completed,
+        total,
+        percent: total > 0 ? Math.round((completed / total) * 100) : 0,
     };
 }
 
-/**
- * Transforms raw API achievement data into display-ready row object.
- * 
- * This is the main data transformation function. It:
- * 1. Enriches achievement with user's account progress
- * 2. Looks up category and group names
- * 3. Normalizes reward data
- * 4. Calculates completion status
- * 5. Pre-computes searchable text for efficient filtering
- * 6. Builds wiki URL for the achievement name
- * 
- * The returned row object is used for rendering cards and applying filters.
- * 
- * @param {object} achievement - Raw API achievement data
- * @param {object} accountMap - Map of achievement ID → user progress
- * @param {object} categories - Map of category ID → category metadata
- * @param {object} groups - Map of group ID → group metadata
- * @returns {object} Transformed achievement row with all display fields
- */
-function buildAchievementRow(achievement, accountMap, categories, groups) {
-    const accountState = accountMap[achievement.id] || null;
-    const category = categories[achievement.category] || null;
-    const group = groups[achievement.group] || null;
-    const rewards = Array.isArray(achievement.rewards) ? achievement.rewards.map(normalizeReward) : [];
-    const status = getAchievementStatus(accountState);
-    const rewardLabels = rewards.length ? rewards.map((reward) => reward.label) : ["None"];
-    
-    // Pre-compute searchable text by aggregating all fields that users might search for
-    const searchText = [
-        achievement.name,
-        achievement.description,
-        achievement.requirement,
-        category?.name,
-        group?.name,
-        rewardLabels.join(" "),
-    ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-    return {
-        id: achievement.id,
-        title: achievement.name,
-        description: achievement.description || achievement.requirement || "",
-        requirement: achievement.requirement || "",
-        icon: achievement.icon,
-        points: achievement.points,
-        category: category?.name || "",
-        group: group?.name || "",
-        status,
-        current: accountState?.current ?? 0,
-        done: Boolean(accountState?.done),
-        rewards,
-        wikiUrl: buildWikiUrl(achievement.name),
-        searchText, // Used for free-text search filtering
-        rawAchievement: achievement,
-        accountState,
-    };
-}
-
-/**
- * Filters achievements based on query string, reward types, and completion status.
- * Uses AND logic between filter types (must match query AND rewards AND status)
- * but OR logic within each filter type.
- * 
- * @param {object[]} data - Array of achievement rows to filter
- * @param {string} query - Free-text search query (searches pre-computed searchText)
- * @param {string[]} rewardFilters - Array of reward type names to match (OR logic)
- * @param {string[]} showFilters - Array of statuses to match: "Started", "Finished", "Unstarted"
- * @returns {object[]} Filtered achievement rows
- */
-function filterAchievements(data, query, rewardFilters, showFilters) {
+function filterAchievements(rows, query, rewardFilters, showFilters) {
     const normalizedQuery = String(query || "").trim().toLowerCase();
-    return data.filter((row) => {
-        // Query filter: achievement must contain search text
-        if (normalizedQuery) {
-            if (!row.searchText.includes(normalizedQuery)) {
+    const rewardFilterList = Array.isArray(rewardFilters) ? rewardFilters : [];
+    const showFilterList = Array.isArray(showFilters) ? showFilters : [];
+
+    return (rows || []).filter((row) => {
+        if (normalizedQuery && !row.searchText.includes(normalizedQuery)) {
+            return false;
+        }
+
+        if (rewardFilterList.length > 0) {
+            const wantNone = rewardFilterList.includes("None");
+            const rewardTags = Array.isArray(row.rewardTags) ? row.rewardTags : [];
+            const tagMatch = rewardTags.some((tag) => rewardFilterList.includes(tag));
+
+            if (!tagMatch && !(wantNone && rewardTags.length === 0)) {
                 return false;
             }
         }
 
-        // Reward filter: achievement must have one of the selected reward types (OR logic)
-        if (Array.isArray(rewardFilters) && rewardFilters.length > 0) {
-            const hasNone = rewardFilters.includes("None");
-            const rewardTypes = row.rewards.map((reward) => reward.label);
-            const matches = row.rewards.some((reward) => rewardFilters.includes(reward.label))
-                || (hasNone && row.rewards.length === 0);
-            if (!matches) {
-                return false;
-            }
-        }
-
-        // Status filter: achievement must match one of the selected statuses (OR logic)
-        if (Array.isArray(showFilters) && showFilters.length > 0) {
-            if (!showFilters.includes(row.status)) {
-                return false;
-            }
+        if (showFilterList.length > 0 && !showFilterList.includes(row.status)) {
+            return false;
         }
 
         return true;
     });
 }
 
-/**
- * Formats achievement objectives/bits for display in expandable detail row.
- * 
- * If achievement has bits (individual objectives):
- *   Shows each bit with user's current progress vs goal (e.g., "5/10")
- * If no bits:
- *   Shows the general requirement text
- * 
- * Returns HTML string for insertion into detail formatter.
- * 
- * @param {object} row - Achievement row with rawAchievement and accountState
- * @returns {string} HTML markup for achievement detail section
- */
-function formatObjectives(row) {
+function readCache(apiKey) {
+    const fallback = {
+        version: 2,
+        apiKey,
+        entries: {},
+    };
+
+    const cache = StorageManager.getJson(CACHE_KEY, fallback);
+
+    if (!cache || cache.apiKey !== apiKey || typeof cache.entries !== "object" || !cache.entries) {
+        return fallback;
+    }
+
+    return {
+        version: 2,
+        apiKey,
+        entries: cache.entries,
+    };
+}
+
+function writeCache(cache) {
+    StorageManager.setJson(CACHE_KEY, cache);
+}
+
+function splitCacheByFreshness(entries, ids, referenceTime = nowMs()) {
+    const freshIds = [];
+    const expiredIds = [];
+    const missingIds = [];
+
+    for (const id of ids) {
+        const entry = entries[String(id)];
+
+        if (!entry || !entry.timestamp || !entry.data) {
+            missingIds.push(id);
+            continue;
+        }
+
+        if ((referenceTime - entry.timestamp) < CACHE_TTL_MS) {
+            freshIds.push(id);
+        } else {
+            expiredIds.push(id);
+        }
+    }
+
+    return { freshIds, expiredIds, missingIds };
+}
+
+function mapById(rows) {
+    const map = {};
+
+    for (const row of rows || []) {
+        if (row && row.id !== undefined && row.id !== null) {
+            map[row.id] = row;
+        }
+    }
+
+    return map;
+}
+
+function mapMasteryRegionName(mastery, reward) {
+    const regionHints = [
+        mastery?.region,
+        mastery?.track?.region,
+        mastery?.track?.name,
+        reward?.region,
+        reward?.name,
+    ]
+        .filter((value) => typeof value === "string")
+        .join(" ")
+        .toLowerCase();
+
+    if (!regionHints) return "Unknown";
+
+    if (regionHints.includes("janthir") || regionHints.includes("lowland")) return "Lowland";
+    if (regionHints.includes("cantha") || regionHints.includes("end of dragons") || regionHints.includes("jade")) return "Cantha";
+    if (regionHints.includes("maguuma") || regionHints.includes("heart of thorns")) return "Maguuma";
+    if (regionHints.includes("desert") || regionHints.includes("path of fire")) return "Desert";
+    if (regionHints.includes("tundra") || regionHints.includes("icebrood")) return "Tundra";
+    if (regionHints.includes("sky") || regionHints.includes("obscure")) return "Sky";
+    if (regionHints.includes("tyria") || regionHints.includes("central")) return "Tyria";
+
+    return "Unknown";
+}
+
+class RewardResolver {
+    constructor() {
+        this.items = {};
+        this.masteries = {};
+        this.skins = {};
+        this.titles = {};
+    }
+
+    async prefetchAll(achievements) {
+        const itemIds = new Set();
+        const masteryIds = new Set();
+        const skinIds = new Set();
+        const titleIds = new Set();
+
+        for (const achievement of achievements || []) {
+            for (const reward of achievement?.rewards || []) {
+                if (reward?.type === "Item" && reward.id) itemIds.add(reward.id);
+                if (reward?.type === "Mastery" && reward.id) masteryIds.add(reward.id);
+                if (reward?.type === "Skin" && reward.id) skinIds.add(reward.id);
+                if (reward?.type === "Title" && reward.id) titleIds.add(reward.id);
+            }
+        }
+
+        await Promise.all([
+            this.prefetchType("items", itemIds, this.items),
+            this.prefetchType("masteries", masteryIds, this.masteries),
+            this.prefetchType("skins", skinIds, this.skins),
+            this.prefetchType("titles", titleIds, this.titles),
+        ]);
+    }
+
+    async prefetchType(path, idSet, target) {
+        const ids = Array.from(idSet || []).filter((id) => target[id] === undefined);
+        if (ids.length === 0) return;
+
+        const rows = await fetchByIdsInBatches(gw2ApiUrl(path), ids, 200).catch(() => []);
+        const byId = mapById(rows);
+
+        for (const id of ids) {
+            target[id] = byId[id] || null;
+        }
+    }
+
+    resolve(reward) {
+        if (!reward || typeof reward !== "object") {
+            return {
+                type: "Unknown",
+                label: "Unknown reward",
+                link: null,
+                icon: null,
+                filterTag: null,
+            };
+        }
+
+        if (reward.type === "AP") {
+            const count = Number(reward.count || 0);
+            return {
+                type: "AP",
+                label: `${count} Achievement Points`,
+                link: buildWikiUrl("Achievement Point"),
+                icon: null,
+                filterTag: "AP",
+            };
+        }
+
+        if (reward.type === "Coin") {
+            const count = Number(reward.count || 0);
+            return {
+                type: "Coin",
+                label: `${count} Coins`,
+                link: buildWikiUrl("Coin"),
+                icon: null,
+                filterTag: null,
+            };
+        }
+
+        if (reward.type === "Item" && reward.id) {
+            const item = this.items[reward.id] || null;
+            const qty = Number(reward.count || 0) > 1 ? `${reward.count}x ` : "";
+            const name = item?.name || reward.name || `Item ${reward.id}`;
+
+            return {
+                type: "Item",
+                label: `${qty}${name}`,
+                link: buildWikiUrl(name),
+                icon: item?.icon || null,
+                filterTag: null,
+            };
+        }
+
+        if (reward.type === "Skin" && reward.id) {
+            const skin = this.skins[reward.id] || null;
+            const name = skin?.name || reward.name || `Skin ${reward.id}`;
+
+            return {
+                type: "Skin",
+                label: name,
+                link: buildWikiUrl(name),
+                icon: skin?.icon || null,
+                filterTag: null,
+            };
+        }
+
+        if (reward.type === "Title" && reward.id) {
+            const title = this.titles[reward.id] || null;
+            const name = title?.name || reward.name || `Title ${reward.id}`;
+
+            return {
+                type: "Title",
+                label: `Title: ${name}`,
+                link: buildWikiUrl(name),
+                icon: null,
+                filterTag: "Titles",
+            };
+        }
+
+        if (reward.type === "Mastery" && reward.id) {
+            const mastery = this.masteries[reward.id] || null;
+            const name = mastery?.name || reward.name || `Mastery ${reward.id}`;
+            const region = mapMasteryRegionName(mastery, reward);
+            const fileName = MASTERY_REGION_ICON_FILE[region] || MASTERY_REGION_ICON_FILE.Unknown;
+
+            return {
+                type: "Mastery",
+                label: `${name} Mastery`,
+                link: null,
+                icon: buildWikiFileUrl(fileName),
+                filterTag: "Masteries",
+            };
+        }
+
+        return {
+            type: reward.type || "Unknown",
+            label: reward.name || reward.type || "Reward",
+            link: reward.name ? buildWikiUrl(reward.name) : null,
+            icon: null,
+            filterTag: null,
+        };
+    }
+}
+
+function buildSearchText(payload) {
+    return [
+        payload.title,
+        payload.description,
+        payload.requirement,
+        payload.quote,
+        payload.category,
+        payload.group,
+        ...(payload.rewards || []).map((reward) => reward.label),
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+}
+
+function buildAchievementPayload(achievement, context, rewardResolver) {
+    const accountState = context.accountMap[achievement.id] || null;
+    const category = context.achievementCategoryMap[achievement.id] || null;
+    const group = context.groupMap[achievement.group] || null;
+
+    const status = getAchievementStatus(accountState);
+    const points = calculatePoints(achievement.tiers, accountState);
+    const objectives = calculateObjectives(achievement.bits, accountState?.bits);
+
+    const rewards = (achievement.rewards || []).map((reward) => rewardResolver.resolve(reward));
+    const rewardTags = Array.from(new Set(rewards.map((reward) => reward.filterTag).filter(Boolean)));
+
+    const payload = {
+        id: achievement.id,
+        title: achievement.name,
+        description: achievement.description || achievement.requirement || "",
+        requirement: achievement.requirement || "",
+        quote: achievement.locked_text || "",
+        icon: achievement.icon || category?.icon || "",
+        category: category?.name || "",
+        categoryWikiUrl: category?.name ? buildWikiUrl(category.name) : "",
+        group: group?.name || "",
+        groupId: achievement.group || null,
+        status,
+        done: Boolean(accountState?.done),
+        current: Number(accountState?.current || 0),
+        tiers: Array.isArray(achievement.tiers) ? achievement.tiers : [],
+        bits: Array.isArray(achievement.bits) ? achievement.bits : [],
+        accountBits: Array.isArray(accountState?.bits) ? accountState.bits : [],
+        objectivesCompleted: objectives.completed,
+        totalObjectives: objectives.total,
+        objectivesPercent: objectives.percent,
+        apEarned: points.earned,
+        maxPoints: points.max,
+        rewards,
+        rewardTags,
+        wikiUrl: buildWikiUrl(achievement.name),
+        rawAchievement: achievement,
+        accountState,
+    };
+
+    payload.searchText = buildSearchText(payload);
+
+    return payload;
+}
+
+async function fetchAchievementContext(apiKey) {
+    const [achievementIds, categories, groups, accountAchievements] = await Promise.all([
+        fetchJson(gw2ApiUrl("achievements")),
+        fetchJson(gw2ApiUrl("achievements/categories?ids=all")),
+        fetchJson(gw2ApiUrl("achievements/groups?ids=all")),
+        fetchJson(`${gw2ApiUrl("account/achievements")}?access_token=${encodeURIComponent(apiKey)}`),
+    ]);
+
+    const achievementCategoryMap = {};
+    for (const category of categories || []) {
+        for (const achievementId of category.achievements || []) {
+            achievementCategoryMap[achievementId] = category;
+        }
+    }
+
+    const groupMap = {};
+    for (const group of groups || []) {
+        groupMap[group.id] = group;
+    }
+
+    const accountMap = {};
+    for (const accountAchievement of accountAchievements || []) {
+        accountMap[accountAchievement.id] = accountAchievement;
+    }
+
+    return {
+        ids: Array.isArray(achievementIds) ? achievementIds : [],
+        achievementCategoryMap,
+        groupMap,
+        accountMap,
+    };
+}
+
+async function fetchAchievementsByIds(ids) {
+    const batches = chunkArray(ids, ACHIEVEMENT_BATCH_SIZE);
+    const results = [];
+
+    for (const batch of batches) {
+        const rows = await fetchJson(`${gw2ApiUrl("achievements")}?ids=${batch.join(",")}`);
+        if (Array.isArray(rows)) {
+            results.push(...rows);
+        }
+    }
+
+    return results;
+}
+
+async function buildPayloadsForIds(ids, context, rewardResolver) {
+    if (!ids || ids.length === 0) return [];
+
+    const achievements = await fetchAchievementsByIds(ids);
+    await rewardResolver.prefetchAll(achievements);
+
+    return achievements.map((achievement) => buildAchievementPayload(achievement, context, rewardResolver));
+}
+
+function upsertCacheEntries(cache, payloads, timestamp = nowMs()) {
+    for (const payload of payloads) {
+        cache.entries[String(payload.id)] = {
+            id: payload.id,
+            timestamp,
+            data: payload,
+        };
+    }
+}
+
+function getCachedPayloads(cache, ids) {
+    const payloads = [];
+
+    for (const id of ids) {
+        const entry = cache.entries[String(id)];
+        if (entry?.data) {
+            payloads.push(entry.data);
+        }
+    }
+
+    return payloads;
+}
+
+function sortPayloadsByIdOrder(payloads, ids) {
+    const indexMap = new Map(ids.map((id, index) => [id, index]));
+
+    return [...payloads].sort((a, b) => {
+        return (indexMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (indexMap.get(b.id) ?? Number.MAX_SAFE_INTEGER);
+    });
+}
+
+async function refreshAchievementIds(apiKey, ids, onUpdate) {
+    if (!ids || ids.length === 0) return;
+
+    const context = await fetchAchievementContext(apiKey);
+    const cache = readCache(apiKey);
+    const rewardResolver = new RewardResolver();
+
+    const chunks = chunkArray(ids, REFRESH_BATCH_SIZE);
+
+    for (const chunk of chunks) {
+        const payloads = await buildPayloadsForIds(chunk, context, rewardResolver);
+        upsertCacheEntries(cache, payloads);
+        writeCache(cache);
+
+        const allPayloads = getCachedPayloads(cache, context.ids);
+        onUpdate(sortPayloadsByIdOrder(allPayloads, context.ids), true);
+    }
+}
+
+async function loadAchievementsWithCache(apiKey, onUpdate) {
+    const context = await fetchAchievementContext(apiKey);
+    const cache = readCache(apiKey);
+    const split = splitCacheByFreshness(cache.entries, context.ids);
+    const rewardResolver = new RewardResolver();
+
+    if (split.freshIds.length > 0 || split.expiredIds.length > 0) {
+        const cached = getCachedPayloads(cache, [...split.freshIds, ...split.expiredIds]);
+        onUpdate(sortPayloadsByIdOrder(cached, context.ids), false);
+    }
+
+    if (split.missingIds.length > 0) {
+        const missingPayloads = await buildPayloadsForIds(split.missingIds, context, rewardResolver);
+        upsertCacheEntries(cache, missingPayloads);
+        writeCache(cache);
+
+        const allPayloads = getCachedPayloads(cache, context.ids);
+        onUpdate(sortPayloadsByIdOrder(allPayloads, context.ids), true);
+    } else {
+        const allPayloads = getCachedPayloads(cache, context.ids);
+        onUpdate(sortPayloadsByIdOrder(allPayloads, context.ids), true);
+    }
+
+    if (split.expiredIds.length > 0) {
+        void refreshAchievementIds(apiKey, split.expiredIds, onUpdate);
+    }
+}
+
+async function periodicRefreshAll(apiKey, onUpdate) {
+    const context = await fetchAchievementContext(apiKey);
+    await refreshAchievementIds(apiKey, context.ids, onUpdate);
+}
+
+function renderRewardFallback(reward, link) {
+    if (reward.type === "Title") {
+        const span = document.createElement("span");
+        span.style.fontSize = "12px";
+        span.style.maxWidth = "140px";
+        span.style.whiteSpace = "nowrap";
+        span.style.overflow = "hidden";
+        span.style.textOverflow = "ellipsis";
+        span.textContent = reward.label;
+        link.appendChild(span);
+        return;
+    }
+
+    const fallback = document.createElement("div");
+    fallback.style.width = "32px";
+    fallback.style.height = "32px";
+    fallback.style.borderRadius = "4px";
+    fallback.style.display = "flex";
+    fallback.style.alignItems = "center";
+    fallback.style.justifyContent = "center";
+    fallback.style.fontSize = "16px";
+    fallback.style.backgroundColor = "rgba(200, 150, 50, 0.3)";
+    fallback.style.border = "1px solid rgba(200, 150, 50, 0.5)";
+
+    if (reward.type === "Mastery") {
+        fallback.textContent = "✦";
+    } else {
+        fallback.textContent = "?";
+    }
+
+    link.appendChild(fallback);
+}
+
+function renderRewardElement(reward) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "achievement-reward";
+
+    if (reward.type === "Title") {
+        wrapper.style.display = "inline-flex";
+        wrapper.style.alignItems = "center";
+        wrapper.style.maxWidth = "220px";
+
+        const titleText = document.createElement("span");
+        titleText.textContent = reward.label;
+        titleText.title = reward.label;
+        titleText.style.fontSize = "12px";
+        titleText.style.whiteSpace = "nowrap";
+        titleText.style.overflow = "hidden";
+        titleText.style.textOverflow = "ellipsis";
+
+        wrapper.appendChild(titleText);
+        return wrapper;
+    }
+
+    const link = reward.link ? document.createElement("a") : document.createElement("span");
+    if (reward.link) {
+        link.href = reward.link;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+    }
+    link.title = reward.label;
+    link.style.display = "inline-flex";
+    link.style.width = "32px";
+    link.style.height = "32px";
+    link.style.alignItems = "center";
+    link.style.justifyContent = "center";
+
+    if (reward.icon) {
+        const img = document.createElement("img");
+        img.src = reward.icon;
+        img.alt = reward.label;
+        img.style.width = "32px";
+        img.style.height = "32px";
+        img.style.borderRadius = "4px";
+        img.style.objectFit = "cover";
+        img.onerror = () => {
+            img.remove();
+            renderRewardFallback(reward, link);
+        };
+        link.appendChild(img);
+    } else {
+        renderRewardFallback(reward, link);
+    }
+
+    wrapper.appendChild(link);
+
+    return wrapper;
+}
+
+function formatObjectivesDetail(row) {
     const achievement = row.rawAchievement;
-    if (!Array.isArray(achievement.bits) || achievement.bits.length === 0) {
-        return `<div class="achievement-detail">
-            <div class="achievement-detail-title">Requirement</div>
-            <p>${achievement.requirement || "No objective details available."}</p>
-        </div>`;
+    let html = "";
+
+    if (Array.isArray(achievement.bits) && achievement.bits.length > 0) {
+        const accountBits = Array.isArray(row.accountBits) ? row.accountBits : [];
+
+        html += '<div class="achievement-detail-section">';
+        html += '<h4 class="detail-section-title">Objectives</h4>';
+        html += '<div class="achievement-objectives-list">';
+
+        achievement.bits.forEach((bit, index) => {
+            const text = bit?.text || (bit?.type ? `${bit.type} #${bit.id}` : "Unnamed objective");
+            const current = accountBits[index] ?? 0;
+            const goal = bit?.value || 0;
+            const isComplete = goal > 0 ? current >= goal : current > 0;
+            const progress = goal > 0 ? `${current}/${goal}` : String(current);
+
+            html += `<div class="achievement-objective-row ${isComplete ? "complete" : ""}">
+                <span class="objective-check">${isComplete ? "✓" : "○"}</span>
+                <span class="objective-text"><strong>Step ${index + 1}:</strong> ${text}</span>
+                ${goal > 0 ? `<span class="objective-progress">${progress}</span>` : ""}
+            </div>`;
+        });
+
+        html += "</div>";
+        html += "</div>";
     }
 
-    // Map account progress bits to achievement's bit definitions
-    const accountBits = Array.isArray(row.accountState?.bits) ? row.accountState.bits : [];
-    const bitsHtml = achievement.bits
-        .map((bit, index) => {
-            const current = accountBits[index] != null ? accountBits[index] : 0;
-            const goal = bit.value || 0;
-            const progress = goal ? `${current}/${goal}` : (current ? String(current) : "0");
-            return `<div class="achievement-objective">${bit.text} ${goal ? `<strong>${progress}</strong>` : ""}</div>`;
-        })
-        .join("");
+    if (Array.isArray(achievement.tiers) && achievement.tiers.length > 0) {
+        html += '<div class="achievement-detail-section">';
+        html += '<h4 class="detail-section-title">Tiers</h4>';
+        html += '<div class="achievement-tiers-list">';
 
-    return `<div class="achievement-detail">
-        <div class="achievement-detail-title">Objectives</div>
-        <div class="achievement-objectives">${bitsHtml}</div>
-    </div>`;
-}
+        achievement.tiers.forEach((tier, index) => {
+            const isComplete = row.done || row.current >= Number(tier?.count || 0);
 
-/**
- * Loads achievement data with intelligent caching (stale-while-revalidate pattern).
- * 
- * Cache TTL Strategy:
- * - Fresh (0-15 min):   Use cache, don't refresh
- * - Stale (15-30 min):  Use cache immediately, refresh in background
- * - Expired (30+ min):  Fetch fresh data
- * 
- * This ensures users get instant results even if data is slightly stale, while
- * keeping data reasonably up-to-date.
- * 
- * @param {string} apiKey - GW2 API key for fetching data
- * @param {function} [onProgress] - Called during load: (rows, totalIds, isComplete, isFresh)
- * @returns {Promise<object[]>} Achievement rows (cached or fresh)
- */
-async function loadAchievementData(apiKey, onProgress = () => {}) {
-    const cache = getCachedAchievements(apiKey);
-    const now = Date.now();
-    const cacheAge = cache ? now - cache.timestamp : Infinity;
-    const hasCache = Boolean(cache && Array.isArray(cache.data) && cache.data.length > 0);
+            html += `<div class="achievement-tier-row ${isComplete ? "complete" : ""}">
+                <span class="tier-check">${isComplete ? "✓" : "○"}</span>
+                <span class="tier-info">Tier ${index + 1}: ${Number(tier?.count || 0)}</span>
+                <span class="tier-points">${Number(tier?.points || 0)} AP</span>
+            </div>`;
+        });
 
-    if (hasCache) {
-        // Report cached data immediately
-        onProgress(cache.data, cache.data.length, true, cacheAge <= CACHE_TTL);
-
-        if (cacheAge <= CACHE_TTL) {
-            // Cache is fresh - return it without background refresh
-            return cache.data;
-        }
-
-        if (cacheAge <= CACHE_STALE_TTL) {
-            // Cache is stale - return it but refresh in background
-            fetchAllAchievementDetails(apiKey, onProgress)
-                .then((rows) => {
-                    setCachedAchievements(apiKey, rows);
-                    onProgress(rows, rows.length, false, true);
-                })
-                .catch((error) => {
-                    console.warn("Background achievement refresh failed", error);
-                });
-
-            return cache.data;
-        }
+        html += "</div>";
+        html += "</div>";
     }
 
-    // Cache expired or doesn't exist - fetch fresh data
-    const rows = await fetchAllAchievementDetails(apiKey, onProgress);
-    setCachedAchievements(apiKey, rows);
-    return rows;
+    if (achievement.requirement) {
+        html += '<div class="achievement-detail-section">';
+        html += '<h4 class="detail-section-title">Requirement</h4>';
+        html += `<p class="achievement-requirement">${achievement.requirement}</p>`;
+        html += "</div>";
+    }
+
+    return html;
 }
 
-/**
- * Initializes the achievements page module.
- * 
- * Called when user navigates to /achievements route with root element.
- * Sets up:
- * - API key validation and conditional UI display
- * - Event listeners for filters (query, rewards, show status)
- * - Achievement data loading and caching
- * - Paginator component with achievement card rendering
- * - Form control persistence
- * - Returns cleanup function for route change
- * 
- * @param {object} options - Initialization options
- * @param {HTMLElement} options.root - Root element containing achievements view DOM
- * @returns {function|undefined} Cleanup function called on route change
- */
+function buildCardElement(item) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "achievement-card";
+    wrapper.dataset.achievementId = String(item.id);
+
+    const main = document.createElement("div");
+    main.className = "achievement-card-main";
+
+    const iconContainer = document.createElement("div");
+    iconContainer.className = "achievement-icon-container";
+    const icon = document.createElement("img");
+    icon.className = "achievement-icon";
+    icon.src = item.icon || "";
+    icon.alt = item.title;
+    iconContainer.appendChild(icon);
+    main.appendChild(iconContainer);
+
+    const content = document.createElement("div");
+    content.className = "achievement-content";
+
+    const titleLink = document.createElement("a");
+    titleLink.className = "achievement-title";
+    titleLink.href = item.wikiUrl;
+    titleLink.target = "_blank";
+    titleLink.rel = "noopener noreferrer";
+    titleLink.textContent = item.title;
+    content.appendChild(titleLink);
+
+    const descriptionEl = document.createElement("p");
+    descriptionEl.className = "achievement-description";
+    descriptionEl.textContent = item.description;
+    content.appendChild(descriptionEl);
+
+    if (item.quote) {
+        const quoteEl = document.createElement("p");
+        quoteEl.className = "achievement-quote";
+        quoteEl.textContent = `"${item.quote}"`;
+        content.appendChild(quoteEl);
+    }
+
+    if (item.category) {
+        const categoryContainer = document.createElement("div");
+        categoryContainer.className = "achievement-categories";
+
+        const categoryBadge = document.createElement("a");
+        categoryBadge.className = "achievement-category-badge";
+        categoryBadge.href = item.categoryWikiUrl || "#";
+        categoryBadge.target = item.categoryWikiUrl ? "_blank" : "";
+        categoryBadge.rel = item.categoryWikiUrl ? "noopener noreferrer" : "";
+        categoryBadge.textContent = item.category;
+
+        categoryContainer.appendChild(categoryBadge);
+        content.appendChild(categoryContainer);
+    }
+
+    main.appendChild(content);
+
+    const stats = document.createElement("div");
+    stats.className = "achievement-stats";
+
+    const apStat = document.createElement("div");
+    apStat.className = "achievement-stat ap-stat";
+    apStat.innerHTML = `<span class="stat-value">${item.apEarned}/${item.maxPoints}</span><span class="stat-label">AP</span>`;
+    stats.appendChild(apStat);
+
+    const completionStat = document.createElement("div");
+    completionStat.className = "achievement-stat completion-stat";
+    if (item.done) {
+        completionStat.innerHTML = "<span class=\"stat-value completed-value\">✓ Completed</span><span class=\"stat-label\">Status</span>";
+    } else if (item.current > 0) {
+        completionStat.innerHTML = `<span class="stat-value">${item.current}</span><span class="stat-label">Progress</span>`;
+    } else {
+        completionStat.innerHTML = "<span class=\"stat-value\">Not Started</span><span class=\"stat-label\">Status</span>";
+    }
+    stats.appendChild(completionStat);
+
+    if (item.totalObjectives > 0) {
+        const objectivesStat = document.createElement("div");
+        objectivesStat.className = "achievement-stat objectives-stat";
+        objectivesStat.innerHTML = `<span class="stat-value">${item.objectivesCompleted}/${item.totalObjectives} (${item.objectivesPercent}%)</span><span class="stat-label">Objectives</span>`;
+        stats.appendChild(objectivesStat);
+    }
+
+    main.appendChild(stats);
+    wrapper.appendChild(main);
+
+    if (Array.isArray(item.rewards) && item.rewards.length > 0) {
+        const rewardSection = document.createElement("div");
+        rewardSection.className = "achievement-rewards-section";
+
+        const rewardLabel = document.createElement("span");
+        rewardLabel.className = "reward-section-label";
+        rewardLabel.textContent = "Rewards: ";
+        rewardSection.appendChild(rewardLabel);
+
+        const rewardContainer = document.createElement("div");
+        rewardContainer.className = "achievement-rewards";
+        item.rewards.forEach((reward) => {
+            rewardContainer.appendChild(renderRewardElement(reward));
+        });
+
+        rewardSection.appendChild(rewardContainer);
+        wrapper.appendChild(rewardSection);
+    }
+
+    const detailContainer = document.createElement("div");
+    detailContainer.className = "achievement-detail-container";
+    detailContainer.style.display = "none";
+    detailContainer.innerHTML = formatObjectivesDetail(item);
+    wrapper.appendChild(detailContainer);
+
+    const expandBtn = document.createElement("button");
+    expandBtn.className = "achievement-expand-btn";
+    expandBtn.type = "button";
+    expandBtn.setAttribute("aria-expanded", "false");
+
+    const expandText = document.createElement("span");
+    expandText.className = "expand-text";
+    expandText.textContent = "Show More";
+
+    const expandIcon = document.createElement("span");
+    expandIcon.className = "expand-icon";
+    expandIcon.textContent = "▼";
+
+    expandBtn.appendChild(expandText);
+    expandBtn.appendChild(expandIcon);
+
+    expandBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const expanded = expandBtn.getAttribute("aria-expanded") === "true";
+
+        if (expanded) {
+            detailContainer.style.display = "none";
+            expandBtn.setAttribute("aria-expanded", "false");
+            expandText.textContent = "Show More";
+            return;
+        }
+
+        detailContainer.style.display = "flex";
+        expandBtn.setAttribute("aria-expanded", "true");
+        expandText.textContent = "Show Less";
+    });
+
+    wrapper.appendChild(expandBtn);
+
+    return wrapper;
+}
+
 export function init({ root }) {
-    // ========== DOM ELEMENT CACHING ==========
     const achievementsSection = root.querySelector("#achievementsSection");
     const achievementResultsSection = root.querySelector("#achievementResultsSection");
     const missingApiKeySection = root.querySelector("#missingApiKeySection");
-    const button = root.querySelector("#configureApiKeyButton");
+    const configureApiKeyButton = root.querySelector("#configureApiKeyButton");
     const statusElement = root.querySelector("#achievementPaginatorStatus");
     const paginatorContainer = root.querySelector("#achievementPaginatorContainer");
 
-    if (!achievementsSection || !achievementResultsSection || !missingApiKeySection || !button || !statusElement || !paginatorContainer) {
+    if (!achievementsSection || !achievementResultsSection || !missingApiKeySection || !configureApiKeyButton || !statusElement || !paginatorContainer) {
         return undefined;
     }
 
-    // ========== INITIALIZATION STATE ==========
     const apiKey = StorageManager.getItem(STORAGE_KEY, "").trim();
-    const handleClick = () => {
-        window.location.hash = "#/home";
-    };
+
+    const queryInput = root.querySelector("#achievementSearchQuery");
+    const rewardsPicker = root.querySelector(`[data-storage-key='${REWARDS_STORAGE_KEY}']`);
+    const showPicker = root.querySelector(`[data-storage-key='${SHOW_STORAGE_KEY}']`);
 
     let paginator = null;
     let allRows = [];
-    let filterCleanup = [];
+    let refreshIntervalId = null;
+    const cleanupFns = [];
 
-    const queryInput = root.querySelector("#achievementSearchQuery");
-    const rewardsPicker = root.querySelector("[data-storage-key='gw2toolbox.achievements.rewards']");
-    const showPicker = root.querySelector("[data-storage-key='gw2toolbox.achievements.show']");
+    const configureApiKeyHandler = () => {
+        window.location.hash = "#/home";
+    };
 
-    /**
-     * Re-filters achievements based on current filter values and updates paginator.
-     * Called whenever any filter changes (query, rewards, or show status).
-     */
     const updatePaginator = () => {
         if (!paginator) return;
+
         const query = queryInput ? queryInput.value : "";
         const rewardFilters = getSelectedValues(rewardsPicker);
         const showFilters = getSelectedValues(showPicker);
-        const filtered = filterAchievements(allRows, query, rewardFilters, showFilters);
+        const filteredRows = filterAchievements(allRows, query, rewardFilters, showFilters);
 
-        if (filtered.length === 0) {
+        if (filteredRows.length === 0) {
             statusElement.textContent = "No achievements match the current filters.";
             statusElement.classList.add("achievements-placeholder");
         } else {
             statusElement.textContent = "";
+            statusElement.classList.remove("achievements-placeholder");
         }
 
-        paginator.setData(filtered);
+        paginator.setData(filteredRows);
     };
 
-    /**
-     * Attaches input event listeners to all filter controls.
-     * Updates paginator on any filter change.
-     */
-    const attachFilterListeners = () => {
-        if (queryInput) {
-            const handler = () => updatePaginator();
-            queryInput.addEventListener("input", handler);
-            filterCleanup.push(() => queryInput.removeEventListener("input", handler));
-        }
+    const ensurePaginator = () => {
+        if (paginator) return;
 
-        [rewardsPicker, showPicker].forEach((picker) => {
-            if (!picker) return;
-            const handler = () => updatePaginator();
-            picker.addEventListener("change", handler);
-            filterCleanup.push(() => picker.removeEventListener("change", handler));
-        });
-    };
-
-    /**
-     * Creates and initializes the Paginator component.
-     * Configures a single-column paginator that renders achievement cards.
-     */
-    const initializePaginator = () => {
         paginator = new Paginator({
             container: paginatorContainer,
             storageKey: "gw2toolbox.achievements.pageSize",
@@ -576,158 +899,106 @@ export function init({ root }) {
                     data: "title",
                     sortable: false,
                     className: "details-control",
-                    // Custom render function for achievement card
-                    render: (_, item) => {
-                        const wrapper = document.createElement("div");
-                        wrapper.className = "achievement-card";
-
-                        const main = document.createElement("div");
-                        main.className = "achievement-card-main";
-
-                        const icon = document.createElement("img");
-                        icon.className = "achievement-icon";
-                        icon.src = item.icon || "";
-                        icon.alt = item.title;
-
-                        const meta = document.createElement("div");
-                        meta.className = "achievement-meta";
-
-                        const title = document.createElement("a");
-                        title.className = "achievement-title";
-                        title.href = item.wikiUrl;
-                        title.target = "_blank";
-                        title.rel = "noopener noreferrer";
-                        title.textContent = item.title;
-
-                        const subtitle = document.createElement("div");
-                        subtitle.className = "achievement-subtitle";
-                        subtitle.textContent = `${item.category}${item.group ? ` — ${item.group}` : ""}`.trim();
-
-                        const description = document.createElement("div");
-                        description.className = "achievement-description";
-                        description.textContent = item.description;
-
-                        meta.appendChild(title);
-                        if (subtitle.textContent) meta.appendChild(subtitle);
-                        meta.appendChild(description);
-
-                        const progress = document.createElement("div");
-                        progress.className = "achievement-progress";
-                        progress.innerHTML = `<div>${item.status}</div><div>${item.done ? "Completed" : `Progress ${item.current}`}</div>`;
-
-                        main.appendChild(icon);
-                        main.appendChild(meta);
-                        main.appendChild(progress);
-
-                        const rewardRow = document.createElement("div");
-                        rewardRow.className = "achievement-rewards";
-
-                        item.rewards.forEach((reward) => {
-                            const rewardEl = document.createElement("span");
-                            rewardEl.className = "achievement-reward";
-
-                            if (reward.link) {
-                                const link = document.createElement("a");
-                                link.href = reward.link;
-                                link.target = "_blank";
-                                link.rel = "noopener noreferrer";
-                                link.textContent = reward.label;
-                                rewardEl.appendChild(link);
-                            } else {
-                                rewardEl.textContent = reward.label;
-                            }
-
-                            rewardRow.appendChild(rewardEl);
-                        });
-
-                        wrapper.appendChild(main);
-                        if (item.rewards.length) {
-                            wrapper.appendChild(rewardRow);
-                        }
-
-                        return wrapper;
-                    },
+                    render: (_, item) => buildCardElement(item),
                 },
             ],
             defaultPageSize: 25,
-            detailsEnabled: true,
-            detailFormatter: (item) => formatObjectives(item),
+            detailsEnabled: false,
         });
     };
 
-    /**
-     * Loads achievement data and starts the display/update flow.
-     * Handles loading states and error messages.
-     */
-    const loadData = async () => {
-        if (!statusElement || !paginatorContainer) {
-            return;
+    const setRows = (rows) => {
+        allRows = Array.isArray(rows) ? rows : [];
+
+        ensurePaginator();
+        updatePaginator();
+    };
+
+    const attachFilterListeners = () => {
+        if (queryInput) {
+            const onInput = () => updatePaginator();
+            queryInput.addEventListener("input", onInput);
+            cleanupFns.push(() => queryInput.removeEventListener("input", onInput));
         }
 
+        [rewardsPicker, showPicker].forEach((picker) => {
+            if (!picker) return;
+            const onChange = () => updatePaginator();
+            picker.addEventListener("change", onChange);
+            cleanupFns.push(() => picker.removeEventListener("change", onChange));
+        });
+    };
+
+    const loadData = async () => {
         statusElement.textContent = "Loading achievements...";
         statusElement.classList.add("achievements-placeholder");
 
         try {
-            // Progress callback: updates display as achievements load in batches
-            const updateRows = (rows, total, completed) => {
-                allRows = rows;
-                if (!paginator) {
-                    initializePaginator();
-                }
-                updatePaginator();
+            await loadAchievementsWithCache(apiKey, (rows, done) => {
+                setRows(rows);
 
-                if (completed) {
-                    statusElement.textContent = rows.length === 0 ? "No achievements could be loaded." : "";
-                    statusElement.classList.toggle("achievements-placeholder", rows.length === 0);
-                } else {
-                    statusElement.textContent = `Loading achievements (${rows.length}/${total})...`;
+                if (!done) {
+                    statusElement.textContent = `Loading achievements (${rows.length})...`;
                     statusElement.classList.add("achievements-placeholder");
+                    return;
                 }
-            };
 
-            const rows = await loadAchievementData(apiKey, updateRows);
-            allRows = rows;
-            if (!paginator) {
-                initializePaginator();
-            }
-            updatePaginator();
-            if (rows.length === 0) {
-                statusElement.textContent = "No achievements could be loaded.";
-            }
+                if (!rows.length) {
+                    statusElement.textContent = "No achievements could be loaded.";
+                    statusElement.classList.add("achievements-placeholder");
+                    return;
+                }
+
+                statusElement.textContent = "";
+                statusElement.classList.remove("achievements-placeholder");
+            });
         } catch (error) {
             statusElement.textContent = `Unable to load achievements. ${error.message}`;
+            statusElement.classList.add("achievements-placeholder");
             console.error(error);
         }
     };
 
-    // ========== CONDITIONAL UI SETUP ==========
+    const startPeriodicRefresh = () => {
+        refreshIntervalId = window.setInterval(() => {
+            void periodicRefreshAll(apiKey, (rows) => {
+                setRows(rows);
+            }).catch((error) => {
+                console.warn("Periodic achievement refresh failed", error);
+            });
+        }, REFRESH_INTERVAL_MS);
+    };
+
+    configureApiKeyButton.addEventListener("click", configureApiKeyHandler);
+    const cleanupForm = initFormControls({ root });
+
     if (!apiKey) {
-        // Hide main content, show API key configuration prompt
         achievementsSection.classList.add("hidden");
         achievementResultsSection.classList.add("hidden");
         missingApiKeySection.classList.remove("hidden");
     } else {
-        // Show main content, hide API key prompt
         achievementsSection.classList.remove("hidden");
         achievementResultsSection.classList.remove("hidden");
         missingApiKeySection.classList.add("hidden");
-        
-        // Start the data loading and filter setup
+
         attachFilterListeners();
-        loadData();
+        void loadData();
+        startPeriodicRefresh();
     }
 
-    // ========== EVENT SETUP & FORM INITIALIZATION ==========
-    button.addEventListener("click", handleClick);
-    const cleanupForm = initFormControls({ root });
-
-    // ========== CLEANUP FUNCTION (called on route change) ==========
     return () => {
-        button.removeEventListener("click", handleClick);
-        filterCleanup.forEach((fn) => fn());
+        configureApiKeyButton.removeEventListener("click", configureApiKeyHandler);
+
+        if (refreshIntervalId) {
+            window.clearInterval(refreshIntervalId);
+        }
+
+        cleanupFns.forEach((fn) => fn());
+
         if (typeof cleanupForm === "function") {
             cleanupForm();
         }
+
         if (paginator && typeof paginator.destroy === "function") {
             paginator.destroy();
         }

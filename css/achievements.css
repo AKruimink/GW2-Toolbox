@@ -40,3 +40,572 @@
     gap: 18px;
     width: 100%;
 }
+
+/* ========== ACHIEVEMENT CARD LAYOUT ========== */
+
+/**
+ * Achievement Card Container
+ * Main card wrapper with professional styling using theme variables
+ */
+.achievement-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid rgb(var(--border-color));
+    border-radius: 8px;
+    background: rgb(var(--secondary-bg-color));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+    cursor: default;
+}
+
+.achievement-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    border-color: rgb(var(--link-color));
+}
+
+/* Only show cursor pointer on clickable elements */
+.achievement-card a,
+.achievement-card button,
+.achievement-reward {
+    cursor: pointer;
+}
+
+.achievement-card a:hover,
+.achievement-reward a {
+    cursor: pointer;
+}
+
+/**
+ * Achievement Card Main Section
+ * 3-column layout: icon | content | statistics
+ */
+.achievement-card-main {
+    display: grid;
+    grid-template-columns: 100px 1fr auto;
+    gap: 16px;
+    align-items: start;
+}
+
+/**
+ * Icon Container
+ * Handles achievement icon display with fallback
+ */
+.achievement-icon-container {
+    min-width: 100px;
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background-color: rgb(var(--bg-color));
+    overflow: hidden;
+}
+
+.achievement-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+/**
+ * Content Section (Title, Description, Quote, Categories)
+ */
+.achievement-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.achievement-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: rgb(var(--primary-text-color));
+    text-decoration: none;
+    transition: color 0.2s ease;
+    word-break: break-word;
+}
+
+.achievement-title:hover {
+    color: rgb(var(--link-color));
+    text-decoration: underline;
+}
+
+.achievement-description {
+    font-size: 0.95rem;
+    color: rgb(var(--secondary-text-color));
+    margin: 0;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+/**
+ * Achievement Quote (for locked achievements)
+ */
+.achievement-quote {
+    font-size: 0.9rem;
+    color: rgb(var(--secondary-text-color));
+    font-style: italic;
+    margin: 4px 0 0 0;
+    padding-left: 12px;
+    border-left: 3px solid rgb(var(--border-color));
+}
+
+/**
+ * Category Badges
+ */
+.achievement-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.achievement-category-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background-color: rgba(0, 102, 204, 0.1);
+    color: rgb(var(--link-color));
+    border-radius: 4px;
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid rgb(var(--link-color));
+    opacity: 0.6;
+}
+
+.achievement-category-badge:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+:root[data-theme="dark"] .achievement-category-badge {
+    opacity: 0.7;
+}
+
+:root[data-theme="dark"] .achievement-category-badge:hover {
+    opacity: 1;
+}
+
+/**
+ * Achievement Statistics
+ * Right-aligned column showing AP, completion, objectives
+ * Labels are fixed width on the right to avoid shifting
+ */
+.achievement-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+    min-width: 160px;
+}
+
+.achievement-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.9rem;
+    justify-content: flex-end;
+}
+
+.stat-value {
+    font-weight: 600;
+    color: rgb(var(--primary-text-color));
+    min-width: 50px;
+    text-align: right;
+}
+
+.stat-label {
+    font-weight: 500;
+    color: rgb(var(--secondary-text-color));
+    min-width: 75px;
+    text-align: right;
+}
+
+.completed-value {
+    color: rgb(40, 160, 60);
+    font-weight: 700;
+}
+
+/**
+ * Rewards Section
+ */
+.achievement-rewards-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-top: 1px solid rgb(var(--border-color));
+}
+
+.reward-section-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgb(var(--secondary-text-color));
+}
+
+.achievement-rewards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.achievement-reward {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    background-color: rgba(200, 150, 50, 0.15);
+    border-radius: 4px;
+    border: 1px solid rgba(200, 150, 50, 0.3);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.achievement-reward:hover {
+    background-color: rgba(200, 150, 50, 0.25);
+    border-color: rgba(200, 150, 50, 0.5);
+    transform: scale(1.05);
+}
+
+.achievement-reward a {
+    display: inline-flex;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+}
+
+.achievement-reward a:hover {
+    opacity: 0.8;
+}
+
+.achievement-reward img {
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+}
+
+/**
+ * Expand Button
+ * Integrated footer bar - more subtle and elegant
+ */
+.achievement-expand-btn {
+    align-self: stretch;
+    padding: 10px 12px;
+    background-color: transparent;
+    border: none;
+    border-top: 1px solid rgb(var(--border-color));
+    color: rgb(var(--secondary-text-color));
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 4px -16px -16px -16px;
+    padding: 10px 16px;
+    border-radius: 0 0 8px 8px;
+}
+
+.achievement-expand-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: rgb(var(--link-color));
+}
+
+.achievement-expand-btn:active {
+    transform: scale(0.98);
+}
+
+.expand-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+    font-size: 0.8rem;
+}
+
+.achievement-expand-btn[aria-expanded="true"] .expand-icon {
+    transform: rotate(180deg);
+}
+
+body.light-mode .achievement-expand-btn:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* ========== DETAIL PANEL (Expanded Content) ========== */
+
+/**
+ * Detail Container
+ * Shown when achievement is expanded
+ */
+.achievement-detail-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px 0;
+    border-top: 1px solid rgb(var(--border-color));
+}
+
+/**
+ * Detail Section
+ * Grouping for objectives, tiers, requirements
+ */
+.achievement-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detail-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgb(var(--primary-text-color));
+    margin: 0 0 8px 0;
+}
+
+/**
+ * Objectives List
+ * Shows individual objectives with completion status
+ */
+.achievement-objectives-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.achievement-objective-row {
+    display: flex;
+    align-items: start;
+    gap: 10px;
+    font-size: 0.95rem;
+    color: rgb(var(--primary-text-color));
+    padding: 6px 0;
+}
+
+.achievement-objective-row.complete {
+    color: rgb(40, 160, 60);
+}
+
+.objective-check {
+    flex-shrink: 0;
+    min-width: 20px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.objective-text {
+    flex: 1;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.objective-progress {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: rgb(var(--secondary-text-color));
+}
+
+/**
+ * Tiers List
+ * Shows tier progression with AP rewards
+ */
+.achievement-tiers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.achievement-tier-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    color: rgb(var(--primary-text-color));
+    padding: 6px 0;
+    border-radius: 4px;
+}
+
+.achievement-tier-row.complete {
+    color: rgb(40, 160, 60);
+}
+
+.tier-check {
+    flex-shrink: 0;
+    min-width: 20px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.tier-info {
+    flex: 1;
+}
+
+.tier-points {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: rgb(200, 130, 20);
+    min-width: 50px;
+    text-align: right;
+}
+
+/**
+ * Requirement Text
+ */
+.achievement-requirement {
+    font-size: 0.95rem;
+    color: rgb(var(--secondary-text-color));
+    line-height: 1.5;
+    margin: 0;
+    word-break: break-word;
+}
+
+/* ========== RESPONSIVE DESIGN ========== */
+
+/**
+ * Tablet and smaller screens (max 768px)
+ * Adjust 3-column grid to accommodate smaller screens
+ */
+@media (max-width: 768px) {
+    .achievement-card-main {
+        grid-template-columns: 80px 1fr;
+        gap: 12px;
+    }
+
+    .achievement-icon-container {
+        min-width: 80px;
+        width: 80px;
+        height: 80px;
+    }
+
+    .achievement-stats {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 8px;
+        min-width: unset;
+    }
+
+    .achievement-stat {
+        flex: 1;
+        justify-content: space-between;
+    }
+
+    .stat-label {
+        display: none;
+    }
+
+    .stat-value {
+        min-width: unset;
+        text-align: left;
+    }
+}
+
+/**
+ * Mobile (max 480px)
+ * Stack all elements vertically
+ */
+@media (max-width: 480px) {
+    .achievement-card {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .achievement-card-main {
+        grid-template-columns: 70px 1fr;
+        gap: 10px;
+    }
+
+    .achievement-icon-container {
+        min-width: 70px;
+        width: 70px;
+        height: 70px;
+    }
+
+    .achievement-title {
+        font-size: 1rem;
+    }
+
+    .achievement-description {
+        font-size: 0.9rem;
+    }
+
+    .achievement-stats {
+        gap: 6px;
+        padding: 8px 0;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .achievement-stat {
+        width: 100%;
+        gap: 6px;
+    }
+
+    .stat-value {
+        font-size: 0.85rem;
+    }
+
+    .achievement-rewards-section {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .achievement-rewards {
+        width: 100%;
+    }
+
+    .achievement-reward {
+        font-size: 0.8rem;
+        padding: 4px 10px;
+    }
+}
+
+/* ========== DETAIL ROW (shown when expanded) ========== */
+
+/**
+ * Achievement Detail Row
+ * Displays below the achievement card when expanded
+ */
+.achievement-detail-row {
+    padding: 16px;
+    margin-top: 8px;
+    background-color: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    animation: slideDown 0.3s ease-out;
+}
+
+:root[data-theme="dark"] .achievement-detail-row {
+    background-color: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/**
+ * Slide down animation for detail row
+ */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 1000px;
+    }
+}
